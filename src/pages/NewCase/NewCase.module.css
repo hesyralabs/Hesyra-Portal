@@ -1,0 +1,680 @@
+/* Additions to NewCase.module.css */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 0.5rem;
+}
+
+.backLink {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--text-primary);
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text-primary);
+  margin-bottom: 0px;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.stepIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.step {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  z-index: 2;
+}
+
+.activeStep {
+  background: var(--text-primary);
+  color: var(--bg-base);
+  border-color: var(--text-primary);
+}
+
+.stepLine {
+  flex: 1;
+  height: 2px;
+  background-color: var(--glass-border);
+  margin: 0 -1rem;
+  z-index: 1;
+}
+
+.formCard {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur-heavy);
+  border-radius: var(--radius-card);
+  padding: 2.5rem;
+  border: 1px solid var(--glass-border);
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 400;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+}
+
+/* Base Inputs */
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  flex: 1;
+}
+
+.inputRow {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.inputGroup label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.inputGroup input,
+.inputGroup select,
+.inputGroup textarea {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  padding: 0.75rem 1rem;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.inputGroup textarea {
+  border-radius: 12px;
+  resize: vertical;
+}
+
+.inputGroup input:focus,
+.inputGroup select:focus,
+.inputGroup textarea:focus {
+  border-color: var(--brand-bioceramic);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.inputError {
+  border-color: #fca5a5 !important;
+  background: rgba(252, 165, 165, 0.05) !important;
+}
+
+.errorText {
+  color: #fca5a5;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.labelError {
+  color: #f87171 !important;
+}
+
+/* Category Grid */
+.caseTypeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.typeCard {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.typeCard:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+}
+
+.typeCardSelected {
+  background: rgba(122, 156, 150, 0.15);
+  border-color: var(--brand-bioceramic);
+}
+
+.typeIcon {
+  color: var(--brand-bioceramic);
+  margin-bottom: 0.5rem;
+}
+
+.typeCard h3 {
+  font-size: 1rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.typeCard p {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Arch Toggle */
+.archToggleGroup {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--glass-bg);
+  padding: 0.25rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  width: max-content;
+}
+
+.archBtn {
+  background: transparent;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.archSelected {
+  background: var(--brand-bioceramic);
+  color: var(--bg-base);
+}
+
+/* Tooth Selector */
+.toothSelectorSection {
+  margin-bottom: 1.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.toothSelectorSection > label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.archContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+
+.archRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.toothBtn {
+  width: 36px;
+  height: 48px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.archRow:first-child .toothBtn { border-radius: 8px 8px 16px 16px; }
+.archRow:last-child .toothBtn { border-radius: 16px 16px 8px 8px; }
+
+.toothBtn:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+  color: var(--text-primary);
+}
+
+.toothSelected {
+  background: var(--brand-bioceramic) !important;
+  color: var(--bg-base) !important;
+  border-color: var(--brand-bioceramic) !important;
+}
+
+.toothSuggested {
+  background: rgba(122, 156, 150, 0.2);
+  border-color: rgba(122, 156, 150, 0.5);
+  color: var(--brand-bioceramic);
+  box-shadow: 0 0 10px rgba(122, 156, 150, 0.3);
+}
+
+.archDivider {
+  height: 1px;
+  width: 100%;
+  background: var(--glass-border);
+}
+
+/* Uploads */
+.helperText {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.uploadArea {
+  border: 2px dashed var(--glass-border);
+  border-radius: 16px;
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  position: relative;
+  transition: all 0.2s;
+}
+
+.uploadArea:hover {
+  border-color: var(--brand-bioceramic);
+}
+
+.uploadIcon {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.uploadArea h3 {
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.fileInput {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* File list */
+.fileList {
+  margin-top: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.fileItemIcon {
+  color: var(--brand-bioceramic);
+  margin-right: 0.75rem;
+}
+
+.fileName {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.fileSize {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+/* Butons */
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+.formActionsSpaceBetween {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2rem;
+}
+
+.btnPrimary, .btnOutline {
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btnPrimary {
+  background: var(--text-primary);
+  color: var(--bg-base);
+  border: none;
+}
+
+.btnOutline {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Success */
+.successSection {
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.successIcon {
+  color: var(--status-shipped);
+  margin-bottom: 1.5rem;
+}
+
+.successSection h2 {
+  font-size: 1.75rem;
+  font-weight: 300;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.successSection p {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.trackingBox {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  display: inline-flex;
+  flex-direction: column;
+  margin-bottom: 2.5rem;
+}
+
+.trackingCode {
+  font-family: monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--brand-bioceramic);
+  letter-spacing: 2px;
+}
+
+/* ─── Material Card Grid ─── */
+.materialGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.materialCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 1rem;
+  background: rgba(0,0,0,0.15);
+  border: 1.5px solid var(--glass-border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.materialCard:hover {
+  border-color: var(--glass-border-strong);
+  background: rgba(0,0,0,0.25);
+}
+
+.materialCardSelected {
+  border-color: var(--brand-bioceramic) !important;
+  background: rgba(122, 156, 150, 0.12) !important;
+  box-shadow: 0 0 16px rgba(122, 156, 150, 0.15);
+}
+
+.materialCategory {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.materialName {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.premiumBadge {
+  font-size: 0.65rem;
+  color: #fbbf24;
+  margin-top: 2px;
+}
+
+/* ─── Finishing Tier Toggle ─── */
+.tierToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.tierBtn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 1.25rem;
+  background: rgba(0,0,0,0.15);
+  border: 1.5px solid var(--glass-border);
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.tierBtn strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.tierBtn span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.tierBtn:hover {
+  border-color: var(--glass-border-strong);
+}
+
+.tierSelected {
+  border-color: var(--brand-bioceramic) !important;
+  background: rgba(122, 156, 150, 0.12) !important;
+}
+
+.tierPremium.tierSelected {
+  border-color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+}
+
+/* ─── Reference Photo Upload ─── */
+.labelWithBadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.requiredBadge {
+  font-size: 0.6rem;
+  background: #fbbf24;
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.refPhotoUpload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 2rem;
+  border: 2px dashed var(--glass-border);
+  border-radius: 14px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.refPhotoUpload:hover {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+
+.refPhotoPreview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(0,0,0,0.15);
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+}
+
+.refPhotoPreview img {
+  width: 120px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+/* ─── VITA Shade Swatches ─── */
+.shadeGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shadeSwatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  background: none;
+  transition: all 0.15s ease;
+  min-width: 40px;
+}
+
+.shadeSwatch:hover {
+  border-color: var(--glass-border-strong);
+  transform: translateY(-2px);
+}
+
+.shadeSelected {
+  border-color: var(--brand-bioceramic) !important;
+  box-shadow: 0 0 12px rgba(122, 156, 150, 0.3);
+}
+
+.swatchColor {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.swatchLabel {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ─── Warning Outline Button (deposits) ─── */
+.btnWarningOutline {
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: #fbbf24;
+  border: 1px solid #fbbf24;
+}
+
+.actionWarning {
+  display: flex;
+  gap: 12px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 14px;
+  padding: 1.5rem;
+}

@@ -1,0 +1,66 @@
+/* src/components/UI/ThemeToggle/ThemeToggle.module.css */
+.toggle {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: var(--blur-light);
+  color: var(--text-primary);
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.toggle:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.toggle:active {
+  transform: translateY(0);
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.brand .icon {
+  color: #7A9C96;
+  filter: drop-shadow(0 0 4px rgba(122, 156, 150, 0.4));
+}
+
+.dark .icon {
+  color: #94a3b8;
+  filter: drop-shadow(0 0 4px rgba(148, 163, 184, 0.3));
+}
+
+.light .icon {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.2));
+}
+
+@keyframes rotateIn {
+  from {
+    transform: rotate(-90deg) scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.icon {
+  animation: rotateIn 0.3s ease-out forwards;
+}

@@ -1,0 +1,65 @@
+/* ═══════════════════════════════════════════════════════════════
+   HESYRA ONBOARDING — Design Tokens
+   Scoped to .onboarding to avoid collisions with portal theme
+   ═══════════════════════════════════════════════════════════════ */
+
+.onboarding {
+  /* Colors */
+  --ob-navy:       #001A33;
+  --ob-navy-2:     #0a2a4a;
+  --ob-navy-tint:  #d9e0e8;
+  --ob-navy-mist:  #f0f3f7;
+  --ob-coral:      #C9786A;
+  --ob-coral-soft: #f5e1dc;
+  --ob-coral-deep: #b06054;
+  --ob-green:      #748C98;
+  --ob-stone:      #f8f6f4;
+  --ob-bg:         #fbfaf8;
+  --ob-ink:        #1a1a1a;
+  --ob-ink-2:      #4a4a4a;
+  --ob-ink-3:      #6e6e6e;
+  --ob-line:       #e8e8e8;
+
+  /* Fonts */
+  --ob-font-display: 'Trebuchet MS', 'Segoe UI', Tahoma, sans-serif;
+  --ob-font-body:    'Calibri', 'Segoe UI', system-ui, sans-serif;
+
+  /* Radii */
+  --ob-radius-sm:  6px;
+  --ob-radius-md:  10px;
+  --ob-radius-lg:  14px;
+  --ob-radius-xl:  20px;
+
+  /* Motion */
+  --ob-ease:     cubic-bezier(0.32, 0.72, 0, 1);
+  --ob-dur:      300ms;
+  --ob-dur-fast: 220ms;
+  --ob-dur-slow: 360ms;
+
+  /* Z-index layering */
+  --ob-z-drawer-backdrop:  110;
+  --ob-z-drawer:           111;
+  --ob-z-welcome-backdrop: 100;
+  --ob-z-welcome:          101;
+  --ob-z-newcase:           99;
+  --ob-z-coach-backdrop:   200;
+  --ob-z-spotlit:          201;
+  --ob-z-coach-popover:    202;
+  --ob-z-toast:            500;
+  --ob-z-confetti:         600;
+
+  /* Base typography */
+  font-family: var(--ob-font-body);
+  color: var(--ob-ink);
+  line-height: 1.5;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .onboarding,
+  .onboarding * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

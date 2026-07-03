@@ -1,0 +1,486 @@
+/* Main Workspace Header */
+.workspaceHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.workspaceTitle {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.workspaceSubtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.btnPrimary {
+  background: var(--text-primary);
+  color: var(--bg-base);
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.2s ease;
+  text-decoration: none;
+}
+
+.btnPrimary:hover {
+  opacity: 0.9;
+}
+
+/* Kanban Board Layout */
+.kanbanBoard {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 16px; 
+}
+
+.kanbanColumn {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+/* Column Header */
+.columnHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.columnProgressBar {
+  height: 2px;
+  background: var(--glass-bg);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  position: relative;
+}
+
+.columnProgressFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--text-tertiary);
+}
+
+.colAction .columnProgressFill { background: #fbbf24; }
+.colDraft .columnProgressFill { background: var(--status-draft); }
+.colSubmitted .columnProgressFill { background: var(--status-submitted); }
+.colDesigning .columnProgressFill { background: var(--status-designing); }
+.colPrinting .columnProgressFill { background: var(--status-milling); }
+.colShipped .columnProgressFill { background: var(--status-shipped); }
+
+.columnTitleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.columnTitle {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.columnCount {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--glass-bg);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.columnContent {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 4px 16px 0; /* Padding-top prevents hover clipping */
+}
+
+.emptyState {
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-card);
+  background: var(--glass-bg);
+}
+
+.emptyIcon {
+  opacity: 0.3;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+/* Case Cards */
+.caseCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  text-decoration: none;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.caseCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--glass-border-strong);
+}
+
+.isDragging {
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4) !important;
+  transform: scale(1.02) rotate(2deg) !important;
+  border-color: var(--brand-bioceramic) !important;
+  z-index: 100;
+  cursor: grabbing !important;
+}
+
+.isDraggingOver {
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.2s ease;
+}
+
+.shippedCard {
+  opacity: 0.6;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.caseId {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.caseId::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.colAction .caseId::before { background: #fbbf24; }
+.colDraft .caseId::before { background: var(--status-draft); }
+.colSubmitted .caseId::before { background: var(--status-submitted); }
+.colDesigning .caseId::before { background: var(--status-designing); }
+.colPrinting .caseId::before { background: var(--status-milling); }
+.colShipped .caseId::before { background: var(--status-shipped); }
+
+.patientName {
+  font-size: 18px;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.rxDetails {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rxItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rxIcon {
+  opacity: 0.8;
+  color: var(--brand-bioceramic);
+}
+
+/* Extracted specific elements */
+.attachmentTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--glass-border);
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: max-content;
+}
+
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 4px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 16px;
+}
+
+.metaText {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dueDate {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.btnCircular {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-circle);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--blur-light);
+  -webkit-backdrop-filter: var(--blur-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btnCircular:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+}
+
+.dropdownContainer {
+  position: relative;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 150px;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+}
+
+.dropdownItem {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dropdownItem:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.dropdownItem.danger {
+  color: var(--status-danger-text);
+  margin-top: 4px;
+  border-top: 1px solid var(--glass-border);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.dropdownItem.danger:hover {
+  background: var(--status-danger-text);
+  color: #ffffff;
+}
+
+.avatarMini {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-circle);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--brand-bioceramic);
+}
+
+.avatarMicro {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-circle);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .kanbanColumn {
+    flex: 0 0 85vw;
+  }
+  
+  .workspaceHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}
+
+/* Completed Column */
+.colCompleted .columnProgressFill { background: #10b981; }
+.colCompleted .caseId::before { background: #10b981; }
+
+.completedCard {
+  opacity: 0.6;
+}
+
+/* Attention Badge */
+.attentionBadge {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+/* Status Tags on Cards */
+.pendingTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-deep);
+  border: 1px solid var(--glass-border);
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: var(--status-info-text);
+  width: max-content;
+  font-weight: 600;
+}
+
+.actionTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-deep);
+  border: 1px solid var(--glass-border);
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: var(--status-warning-text);
+  width: max-content;
+  font-weight: 600;
+}
+
+/* Top Row: Wallet + Strike */
+.topRow {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.walletSection { flex: 1; max-width: 420px; }
+.strikeSection { flex: 1; }
+
+@media (max-width: 900px) {
+  .topRow { flex-direction: column; }
+  .walletSection { max-width: 100%; }
+}
+
+/* Payment Column */
+.colPayment .columnProgressFill { background: #3b82f6; }
+.colPayment .caseId::before { background: #3b82f6; }
+
+/* Payment Tags */
+.paymentTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: #60a5fa;
+  width: max-content;
+  font-weight: 600;
+}
+
+.overdueTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: #f87171;
+  width: max-content;
+  font-weight: 600;
+}
+
+/* Payment & Overdue Card Highlights */
+.paymentCard {
+  border-left: 3px solid #3b82f6;
+}
+.overdueCard {
+  border-left: 3px solid #ef4444;
+  animation: overdueGlow 3s ease-in-out infinite;
+}
+@keyframes overdueGlow {
+  0%, 100% { box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.15); }
+}

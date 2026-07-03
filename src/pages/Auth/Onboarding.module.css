@@ -1,0 +1,547 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Hesyra Portal — Doctor Onboarding Wizard
+   Premium glassmorphism multi-step setup flow
+   ═══════════════════════════════════════════════════════════════════ */
+
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100vw;
+  background: var(--bg-base);
+  position: relative;
+  overflow: auto;
+  padding: 1.5rem;
+}
+
+/* ─── Background Blobs ─── */
+.blob {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(122, 156, 150, 0.15) 0%, transparent 70%);
+  filter: blur(80px);
+  z-index: 0;
+  animation: moveBlob 25s infinite alternate ease-in-out;
+  border-radius: 50%;
+}
+
+.blob2 {
+  background: radial-gradient(circle, rgba(0, 26, 51, 0.4) 0%, transparent 70%);
+  animation-duration: 30s;
+  animation-delay: -5s;
+  width: 800px;
+  height: 800px;
+  right: -10%;
+  top: -10%;
+}
+
+.blob3 {
+  background: radial-gradient(circle, rgba(122, 156, 150, 0.1) 0%, transparent 70%);
+  animation-duration: 35s;
+  animation-delay: -10s;
+  left: 20%;
+  bottom: -20%;
+}
+
+@keyframes moveBlob {
+  0% { transform: translate(-10%, -10%) scale(1); }
+  50% { transform: translate(10%, 15%) scale(1.1); }
+  100% { transform: translate(-5%, 5%) scale(0.9); }
+}
+
+/* ─── Main Card ─── */
+.card {
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 3rem);
+  background: var(--glass-bg);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid var(--glass-border);
+  border-radius: 32px;
+  overflow: hidden;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Header Strip ─── */
+.headerStrip {
+  background: linear-gradient(135deg, var(--brand-azure) 0%, #002d5a 100%);
+  padding: 2rem 2.5rem 1.5rem;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.headerStrip::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(122, 156, 150, 0.3), transparent);
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 1.25rem;
+}
+
+.logoWrapper {
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.logo {
+  height: 22px;
+  object-fit: contain;
+}
+
+.headerTitle {
+  font-size: 1.5rem;
+  font-weight: 300;
+  letter-spacing: -1px;
+  color: #fff;
+}
+
+.headerSubtitle {
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+  max-width: 420px;
+}
+
+/* ─── Step Indicator ─── */
+.stepIndicator {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 1.25rem 2.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.stepDot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-tertiary);
+  border: 1.5px solid var(--glass-border);
+}
+
+.stepDot.active {
+  background: linear-gradient(135deg, var(--brand-bioceramic) 0%, #5d7c76 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 0 16px rgba(122, 156, 150, 0.4);
+}
+
+.stepDot.done {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.stepLine {
+  flex: 1;
+  height: 2px;
+  background: var(--glass-border);
+  margin: 0 6px;
+  transition: background 0.4s;
+}
+
+.stepLine.done {
+  background: linear-gradient(90deg, #10b981, var(--brand-bioceramic));
+}
+
+.stepLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-left: 8px;
+  white-space: nowrap;
+  display: none;
+}
+
+.stepLabel.active {
+  display: inline;
+  color: var(--text-primary);
+}
+
+/* ─── Body ─── */
+.body {
+  padding: 2rem 2.5rem;
+  animation: fadeSlideIn 0.35s ease-out;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.375rem;
+}
+
+.sectionDesc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.75rem;
+  line-height: 1.5;
+}
+
+/* ─── Inputs ─── */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.inputGroupFull {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  grid-column: 1 / -1;
+}
+
+.inputGroup label,
+.inputGroupFull label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.inputGroup input,
+.inputGroup select,
+.inputGroupFull input,
+.inputGroupFull select {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.inputGroup input:focus,
+.inputGroup select:focus,
+.inputGroupFull input:focus,
+.inputGroupFull select:focus {
+  outline: none;
+  border-color: var(--brand-bioceramic);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(122, 156, 150, 0.1);
+}
+
+.inputGroup input::placeholder,
+.inputGroupFull input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.inputError {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.errorText {
+  font-size: 11px;
+  color: #fca5a5;
+  margin-top: 2px;
+}
+
+/* ─── Toggle Row (Same as clinic checkbox) ─── */
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggleRow:hover {
+  border-color: var(--brand-bioceramic);
+}
+
+.toggleRow input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-bioceramic);
+  cursor: pointer;
+}
+
+.toggleRow span {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ─── Option Pills (courier / contact) ─── */
+.pillGroup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+}
+
+.pill {
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pill:hover {
+  border-color: var(--brand-bioceramic);
+  color: var(--text-primary);
+}
+
+.pill.selected {
+  background: linear-gradient(135deg, var(--brand-bioceramic) 0%, #5d7c76 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Password Strength ─── */
+.strengthBar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  margin-top: 8px;
+  overflow: hidden;
+  grid-column: 1 / -1;
+}
+
+.strengthFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s, background 0.3s;
+}
+
+.strengthLabel {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 4px;
+  grid-column: 1 / -1;
+}
+
+/* ─── Actions ─── */
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2.5rem;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.btnBack {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  padding: 10px 22px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btnBack:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.btnNext {
+  background: #fff;
+  color: var(--brand-azure);
+  border: none;
+  border-radius: 12px;
+  padding: 11px 28px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btnNext:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(255, 255, 255, 0.15);
+}
+
+.btnNext:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btnNext:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btnComplete {
+  composes: btnNext;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+}
+
+.btnComplete:hover:not(:disabled) {
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+}
+
+/* ─── Success Screen ─── */
+.successScreen {
+  padding: 4rem 2.5rem;
+  text-align: center;
+  animation: fadeSlideIn 0.5s ease-out;
+}
+
+.successIcon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.5rem;
+  color: #10b981;
+  animation: pop 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.successScreen h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.successScreen p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  max-width: 380px;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+}
+
+.successBtn {
+  composes: btnNext;
+  margin: 0 auto;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 680px) {
+  .card {
+    max-width: 100%;
+    border-radius: 24px;
+  }
+  .headerStrip {
+    padding: 1.5rem 1.5rem 1.25rem;
+  }
+  .stepIndicator {
+    padding: 1rem 1.5rem;
+  }
+  .body {
+    padding: 1.5rem;
+  }
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+  .actions {
+    padding: 1.25rem 1.5rem;
+  }
+}
+
+/* ─── Light Mode Overrides ─── */
+:global(.light-mode) .card {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 40px 100px rgba(0, 26, 51, 0.12);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+:global(.light-mode) .inputGroup input,
+:global(.light-mode) .inputGroup select,
+:global(.light-mode) .inputGroupFull input,
+:global(.light-mode) .inputGroupFull select {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 26, 51, 0.08);
+}
+
+:global(.light-mode) .btnNext,
+:global(.light-mode) .successBtn {
+  background: var(--brand-azure);
+  color: #fff;
+}
+
+:global(.light-mode) .pill {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+:global(.light-mode) .toggleRow {
+  background: rgba(0, 0, 0, 0.03);
+}

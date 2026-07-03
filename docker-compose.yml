@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hesyra-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hesyra
+      POSTGRES_PASSWORD: hesyra_dev_2024
+      POSTGRES_DB: hesyra_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hesyra -d hesyra_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: hesyra-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://hesyra:hesyra_dev_2024@postgres:5432/hesyra_portal?schema=public
+      - JWT_SECRET=hesyra-jwt-secret-change-this-in-production
+      - PORT=3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

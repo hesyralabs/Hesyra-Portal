@@ -1,0 +1,455 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  customId  String   @unique
+  username  String?  @unique
+  stateCode String?            // e.g. "MH", "DL", "KA"
+  cityCode  String?            // e.g. "27", "05", "50"
+  docSerial Int?               // Nth doctor from that city: 1, 2, 3...
+  name      String
+  email     String   @unique
+  password  String
+  role      String   // 'admin' | 'manager' | 'technician' | 'cad_designer' | 'dispatch' | 'clinic'
+  clinic    String?  // Only for clinic role
+  location  String?  // Only for technician/dispatch
+  status    String   @default("active") // 'active' | 'suspended' | 'banned'
+  joinDate  DateTime @default(now())
+
+  // ─── Dispatch Permission (flag-based, NOT role-based) ─────────
+  // ALWAYS check: user.dispatchPermission === true
+  // NEVER check: user.role === 'dispatch'
+  // Technicians default to true. When a dedicated dispatch person is hired:
+  // create their account (role='dispatch', dispatchPermission=true),
+  // set existing tech's dispatchPermission=false. Zero API changes.
+  dispatchPermission Boolean @default(false)
+
+  // ─── CAD Designer Activity Tracking ──────────────────────────
+  lastActiveAt      DateTime?  // Updated on each authenticated request for cad_designer
+  deactivatedAt     DateTime?  // Set by auto-deactivation job (60-day inactivity)
+  deactivatedReason String?    // 'inactivity' | 'manual' | 'engagement_ended'
+
+  // ─── 2FA (mandatory for admin + manager) ─────────────────────
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorSecret   String?  // TOTP secret — never returned in API responses
+
+  // ─── Account Recovery ────────────────────────────────────────
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+
+  // ─── Onboarding (clinic role only) ───────────────────────────
+  onboardingComplete     Boolean   @default(false)
+  welcomeCompleted       Boolean   @default(false)
+  welcomeCompletedAt     DateTime?
+  welcomeLastStep        Int       @default(1)
+  newCaseTourCompleted   Boolean   @default(false)
+  newCaseTourCompletedAt DateTime?
+  deepDiveOpenedCount    Int       @default(0)
+
+  // ─── Settings Preferences ────────────────────────────────────
+  notificationPreferences String?  // JSON string for notification settings
+
+  // ─── Extended Profile (populated during clinic onboarding) ────
+  phone               String?
+  licenseNumber       String?
+  clinicAddress       String?
+  clinicCity          String?
+  clinicState         String?
+  clinicPinCode       String?
+  scannerModel        String?
+  shippingAddress     String?
+  shippingCity        String?
+  shippingState       String?
+  shippingPinCode     String?
+  preferredCourier    String?
+  preferredContact    String?
+
+  // ─── Payment & Trust Fields (clinic role only) ────────────────
+  strikeCount          Int     @default(0)
+  trustLevel           String  @default("clean")
+  preferredPaymentMode String  @default("pay_on_go")
+
+  // ─── Credit / Billing Terms (clinic role only) ───────────────
+  // billingMode: 'prepaid' (default, pay before dispatch)
+  //              'net_30'  (dispatch on credit, consolidated monthly invoice)
+  billingMode       String    @default("prepaid")
+  creditLimitPaise  Int       @default(0)     // Max outstanding unpaid tab (0 = no limit set)
+  outstandingPaise  Int       @default(0)     // Current unpaid dispatched total (atomic)
+  creditApprovedBy  String?                   // Manager userId who granted credit terms
+  creditApprovedAt  DateTime?                 // Timestamp of approval
+
+  // Relations
+  cases              Case[]              @relation("DoctorCases")
+  techCases          Case[]              @relation("TechCases")
+  designerCases      Case[]              @relation("DesignerCases")
+  messages           Message[]
+  wallet             Wallet?
+  strikes            Strike[]
+  paymentRecords     PaymentRecord[]
+  resolutionTickets  ResolutionTicket[]
+  supportTickets     SupportTicket[]     @relation("TicketOwner")
+  assignedTickets    SupportTicket[]     @relation("TicketAssignee")
+  auditLogs          AuditLog[]
+  designerStats      DesignerStats?
+  invoices           Invoice[]           @relation("ClinicInvoices")
+}
+
+model Counter {
+  id    String @id
+  value Int    @default(0)
+}
+
+model Case {
+  id              String   @id @default(uuid())
+  customId        String   @unique
+  patient         String
+  caseType        String
+  type            String
+  material        String
+  shade           String
+  toothNumbers    String
+  archTarget      String   @default("")
+  implantSystem   String   @default("")
+  instructions    String
+  status          String   @default("submitted")
+  clinic          String
+  due             String   @default("TBD")
+
+  // ─── Legacy display field (for backwards UI compat) ──────────
+  tech            String?  @default("Unassigned")
+
+  // ─── Real FK assignments ──────────────────────────────────────
+  assignedTechId      String?
+  assignedTech        User?    @relation("TechCases",      fields: [assignedTechId],      references: [id])
+  assignedDesignerId  String?
+  assignedDesigner    User?    @relation("DesignerCases",  fields: [assignedDesignerId],  references: [id])
+
+  // ─── Open Pool / Self-Select System ─────────────────────────
+  poolEnteredAt       DateTime?  // When case entered the open pool (null = not pooled)
+  claimedAt           DateTime?  // When a designer self-selected this case
+  claimedBy           String?    // Snapshot of designer ID at claim time
+  assignmentMethod    String?    // 'self_select' | 'auto_assign' | 'manager_assign'
+
+  // ─── Manager-only fields ──────────────────────────────────────
+  internalNotes   String?   // Visible to manager + technician only — NEVER to clinic
+  priorityFlag    Boolean   @default(false)
+
+  // ─── Dispatch fields ──────────────────────────────────────────
+  dispatchPhotoUrl    String?   // Mandatory before status → 'dispatched'
+  packagedAt          DateTime?
+  dispatchedAt        DateTime?
+
+  trackingCourier String?
+  trackingNumber  String?
+  rejectionReason String?
+
+  // ─── Payment Fields ───────────────────────────────────────────
+  totalAmountPaise      Int?
+  depositPaidPaise      Int        @default(0)
+  readyForDispatchAt    DateTime?
+  paymentConfirmedAt    DateTime?
+  disputeActive         Boolean    @default(false)
+  disputeReason         String?
+
+  // ─── Credit Billing ──────────────────────────────────────────
+  dispatchedOnCredit    Boolean    @default(false)
+  creditInvoiceId       String?
+
+  // ─── Print Batch (production floor) ────────────────────────
+  // Links a case to a print batch. Set when tech creates a batch.
+  // assignedCeramistId is set after printing, when tech hands off finishing.
+  printBatchId        String?
+  printBatch          PrintBatch?  @relation("BatchCases", fields: [printBatchId], references: [id])
+  assignedCeramistId  String?
+
+  // ─── SKU Catalog (material + finishing tier) ────────────────
+  materialSkuId       String?               // FK to MaterialSKU — null for legacy cases
+  finishingTier       String  @default("standard") // 'standard' (Studio Finish) | 'premium' (Signature Match)
+  referencePhotoUrl   String?               // Adjacent teeth photo (required when premium finishing)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  doctorId        String
+  doctor          User     @relation("DoctorCases", fields: [doctorId], references: [id])
+
+  messages        Message[]
+  timeline        Timeline[]
+  invoices        Invoice[]         @relation("CaseInvoices")
+  files           CaseFile[]
+  paymentRecords  PaymentRecord[]
+  strikes         Strike[]
+  supportTickets  SupportTicket[]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRINT BATCH — Groups multiple cases into one 3D print job.
+// Tech creates batches from the auto-segmented dashboard.
+// ═══════════════════════════════════════════════════════════════
+model PrintBatch {
+  id          String    @id @default(uuid())
+  customId    String    @unique          // PB-YYMM-XXX
+  name        String?                    // Optional label: "Zirconia Batch #3"
+  status      String    @default("preparing") // preparing | printing | printed | completed
+  material    String?                    // Material grouping
+  caseType    String?                    // Case type grouping (crown, bridge, etc.)
+  machine     String?                    // Which printer/mill
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdBy   String                     // Tech userId who created this batch
+  createdAt   DateTime  @default(now())
+  cases       Case[]    @relation("BatchCases")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MATERIAL SKU — Dynamic catalog of materials managed by lab.
+// Manager toggles stock availability; Admin sets pricing.
+// ═══════════════════════════════════════════════════════════════
+model MaterialSKU {
+  id              String   @id @default(uuid())
+  slug            String   @unique           // "ceramic_ultra", "precision_zirconia"
+  displayName     String                     // "Ceramic Ultra" — what doctors see
+  internalName    String?                    // "Graphy Ceramic" — what lab staff see
+  caseTypes       String                     // JSON array: ["crown_bridge","veneer"]
+  category        String                     // "ceramic" | "zirconia" | "resin" | "acrylic"
+  shadeApplicable Boolean  @default(true)    // Does this material need shade selection?
+  finishingTiers  String   @default("[\"standard\",\"premium\"]") // JSON: which tiers available
+  basePrice       Int?                       // Base price in paise per unit
+  premiumUpcharge Int?                       // Signature Match upcharge paise (per unit for crown/veneer, per tooth for bridge)
+  sortOrder       Int      @default(0)       // Display order in form
+  active          Boolean  @default(true)    // Manager toggles stock
+  stockNote       String?                    // "Low stock — ETA 2 weeks"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIT LOG — Immutable. Append-only. Never update, never delete.
+// Written in a separate try/catch — a failed write never blocks
+// the triggering action, but must fire an alert.
+// ═══════════════════════════════════════════════════════════════
+model AuditLog {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+
+  actorId     String
+  actorRole   String   // Snapshot of role at time of action — immutable
+  actor       User     @relation(fields: [actorId], references: [id])
+
+  action      String   // PAYMENT_OVERRIDE | CASE_STATE_FORCE | ACCOUNT_SUSPEND |
+                       // ACCOUNT_REACTIVATE | ROLE_CHANGE | BONUS_CREDIT | REFUND |
+                       // REMAKE_APPROVED | REMAKE_REJECTED | BROADCAST_SENT | PASSWORD_RESET
+  entityType  String   // case | user | wallet | payment | ticket
+  entityId    String   // ID of the affected entity
+
+  beforeState String?  // JSON snapshot of state before the action
+  afterState  String?  // JSON snapshot of state after the action
+  reason      String   // Mandatory — API layer rejects empty strings for override actions
+  ipAddress   String?  // Captured for admin + manager logins and override actions
+  metadata    String?  // Additional JSON context (e.g. dispute details)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUPPORT TICKETS
+// ═══════════════════════════════════════════════════════════════
+model SupportTicket {
+  id               String   @id @default(uuid())
+  subject          String
+  description      String
+  status           String   @default("open") // open | in_progress | escalated | resolved | closed
+  priority         String   @default("normal") // low | normal | high | urgent
+  resolution       String?
+  escalatedToAdmin Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  userId      String
+  user        User     @relation("TicketOwner",    fields: [userId],     references: [id])
+
+  assignedTo  String?
+  assignee    User?    @relation("TicketAssignee", fields: [assignedTo], references: [id])
+
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+}
+
+model CaseFile {
+  id         String   @id @default(uuid())
+  filename   String
+  path       String
+  size       Int
+  mimetype   String
+  category   String   // 'scan' | 'design' | 'dispatch_photo'
+  uploadedBy String   // 'clinic' | 'lab' | 'cad_designer' | 'dispatch'
+  createdAt  DateTime @default(now())
+
+  caseId     String
+  case       Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  text      String
+  from      String   // 'clinic' | 'lab' | 'manager'
+  createdAt DateTime @default(now())
+
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Timeline {
+  id        String   @id @default(uuid())
+  label     String
+  info      String?
+  createdAt DateTime @default(now())
+
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id        String   @id @default(uuid())
+  customId  String   @unique
+  amount    Float
+  status    String   @default("unpaid")  // 'unpaid' | 'paid' | 'overdue'
+  clinic    String
+
+  gstRate        Float?
+  hsnCode        String?
+  gstin          String?
+  taxAmountPaise Int?
+
+  // ─── Monthly Credit Invoice fields ───────────────────────────
+  // invoiceType: 'per_case' (legacy, generated at dispatch for prepaid)
+  //              'monthly'  (new, consolidated at month-end for net_30 clinics)
+  invoiceType   String    @default("per_case")
+  billingPeriod String?   // e.g. "2026-05" — the month this invoice covers
+  dueDate       DateTime? // payment due date (30 days after generation)
+  paidAt        DateTime? // when payment was confirmed
+
+  // Link to clinic user (for monthly invoices)
+  userId    String?
+  user      User?    @relation("ClinicInvoices", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  cases     Case[]   @relation("CaseInvoices")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAYMENT SYSTEM MODELS
+// ═══════════════════════════════════════════════════════════════
+
+model Wallet {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  balancePaise     Int      @default(0)
+  totalLoadedPaise Int      @default(0)
+  totalSpentPaise  Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transactions     WalletTransaction[]
+}
+
+model WalletTransaction {
+  id                String   @id @default(uuid())
+  walletId          String
+  wallet            Wallet   @relation(fields: [walletId], references: [id])
+  type              String   // LOAD | ORDER_DEDUCT | DEPOSIT_DEDUCT | REFUND | BONUS_CREDIT | MANUAL_ADJUSTMENT
+  amountPaise       Int
+  direction         String   // CREDIT | DEBIT
+  description       String
+  razorpayPaymentId String?
+  caseId            String?
+  adminId           String?
+  reason            String?
+  createdAt         DateTime @default(now())
+}
+
+model PaymentRecord {
+  id                    String   @id @default(uuid())
+  caseId                String
+  case                  Case     @relation(fields: [caseId], references: [id])
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id])
+  amountPaise           Int
+  type                  String   // PAY_ON_GO | WALLET_LOAD | DEPOSIT
+  status                String   @default("pending")
+  razorpayPaymentId     String?
+  razorpayOrderId       String?
+  razorpayPaymentLinkId String?
+  paymentLinkUrl        String?
+  paymentLinkExpiry     DateTime?
+  walletDeductPaise     Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Strike {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  caseId       String
+  case         Case      @relation(fields: [caseId], references: [id])
+  strikeNumber Int
+  appliedAt    DateTime  @default(now())
+  pardonedAt   DateTime?
+  pardonedBy   String?
+  pardonReason String?
+  isActive     Boolean   @default(true)
+
+  @@unique([userId, caseId])
+}
+
+model ResolutionTicket {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id])
+  reason             String
+  status             String    @default("pending")
+  adminNotes         String?
+  resolvedBy         String?
+  overdueAmountPaise Int       @default(0)
+  createdAt          DateTime  @default(now())
+  resolvedAt         DateTime?
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DESIGNER STATS — Performance metrics for auto-assignment algorithm.
+// Updated incrementally on case milestones. Never deleted.
+// ═══════════════════════════════════════════════════════════════
+model DesignerStats {
+  id                  String   @id @default(uuid())
+  designerId          String   @unique
+  designer            User     @relation(fields: [designerId], references: [id])
+
+  // Aggregated totals
+  totalCompleted      Int      @default(0)    // Lifetime cases reached design_approved
+  totalRevisions      Int      @default(0)    // Times revision was requested across all cases
+
+  // Speed metric — avg hours from cad_assigned to design_ready
+  avgTurnaroundHours  Float    @default(0)
+
+  // Quality metric — revision rate (totalRevisions / totalCompleted)
+  revisionRate        Float    @default(0)
+
+  // Per case-type completion counts
+  // Stored as JSON string: { "crown_bridge": 45, "aligner": 12, ... }
+  caseTypeBreakdown   String   @default("{}")
+
+  // Live workload count (synced on claim/complete)
+  currentActiveCases  Int      @default(0)
+
+  lastUpdatedAt       DateTime @updatedAt
+}

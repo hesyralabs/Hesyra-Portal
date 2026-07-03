@@ -1,0 +1,167 @@
+.container { padding: 0; min-height: 100%; background: #060c15; font-family: 'Inter', sans-serif; }
+
+.header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 1.5rem 1.75rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.title { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin: 0 0 0.2rem; }
+.subtitle { font-size: 0.8rem; color: rgba(255,255,255,0.3); margin: 0; }
+
+.controls { display: flex; gap: 0.6rem; align-items: center; }
+.searchBox {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; padding: 0.45rem 0.85rem; color: rgba(255,255,255,0.4);
+}
+.searchBox input { background: none; border: none; outline: none; color: #e2e8f0; font-size: 0.83rem; width: 180px; }
+.refreshBtn {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px; color: rgba(255,255,255,0.4); cursor: pointer; transition: all 0.15s;
+}
+.refreshBtn:hover { color: #fff; }
+
+/* ── Summary row ── */
+.summaryRow {
+  display: flex; gap: 0.75rem; padding: 1rem 1.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.summaryTile {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.9rem; border-radius: 10px;
+  background: rgba(255,255,255,0.03); border: 1px solid;
+}
+.summaryCount { font-size: 1rem; font-weight: 700; }
+.summaryLabel { font-size: 0.75rem; color: rgba(255,255,255,0.4); }
+
+/* ── Table ── */
+.tableWrapper { padding: 0 1.75rem 1.75rem; }
+
+.tableHead, .tableRow {
+  display: grid;
+  grid-template-columns: 1fr 130px 110px 110px 100px 36px;
+  gap: 0.75rem; align-items: center;
+}
+.tableHead {
+  padding: 0.6rem 1rem; margin: 1rem 0 0;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: rgba(255,255,255,0.25);
+}
+
+.tableBody { display: flex; flex-direction: column; gap: 0.4rem; }
+.clinicBlock { border-radius: 12px; overflow: hidden; }
+
+.tableRow {
+  padding: 0.85rem 1rem; cursor: pointer;
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px; transition: all 0.15s;
+}
+.tableRow:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+.rowExpanded { border-radius: 12px 12px 0 0; border-color: rgba(99,102,241,0.25); background: rgba(99,102,241,0.05); }
+
+.clinicName { font-size: 0.88rem; font-weight: 600; color: #f1f5f9; }
+.clinicMeta { font-size: 0.73rem; color: rgba(255,255,255,0.35); margin-top: 0.15rem; }
+
+.trustBadge {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.73rem; font-weight: 600; padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+
+.walletBal { font-size: 0.88rem; font-weight: 600; color: #10b981; }
+.casesCount { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; }
+.colJoin { font-size: 0.78rem; color: rgba(255,255,255,0.4); }
+.colExpand { color: rgba(255,255,255,0.3); display: flex; justify-content: center; }
+
+/* ── Skeleton ── */
+.skeletonRow {
+  height: 58px; border-radius: 12px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+.empty { padding: 2rem; text-align: center; color: rgba(255,255,255,0.25); font-size: 0.85rem; }
+
+/* ── Wallet panel ── */
+.walletPanel {
+  background: rgba(15,30,50,0.8); border: 1px solid rgba(99,102,241,0.2);
+  border-top: none; border-radius: 0 0 12px 12px;
+  padding: 1rem 1.25rem;
+}
+.walletLoading, .walletEmpty { font-size: 0.8rem; color: rgba(255,255,255,0.3); }
+.walletStats {
+  display: flex; gap: 2rem; align-items: center; margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.wStat span { font-size: 0.68rem; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.06em; display: block; }
+.wStat strong { font-size: 0.9rem; color: #e2e8f0; font-weight: 600; }
+.wReadOnly { margin-left: auto; font-size: 0.68rem; color: rgba(255,255,255,0.2); font-style: italic; }
+
+.txList { display: flex; flex-direction: column; gap: 0.35rem; }
+.txRow {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.35rem 0.5rem; border-radius: 7px;
+  font-size: 0.78rem;
+}
+.txRow:hover { background: rgba(255,255,255,0.03); }
+.txDir { font-weight: 700; width: 80px; flex-shrink: 0; }
+.credit { color: #10b981; }
+.debit { color: #f87171; }
+.txDesc { flex: 1; color: rgba(255,255,255,0.5); }
+.txDate { color: rgba(255,255,255,0.25); flex-shrink: 0; }
+
+/* ─── Billing button ─── */
+.billingBtn {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+}
+.billingBtn:hover { opacity: 1; background: rgba(167,139,250,0.12); }
+
+/* ─── Billing modal ─── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+.modal {
+  background: #1a1f2e;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 1.5rem;
+  width: 420px;
+  max-width: 95vw;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.modalClose {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+.modalClose:hover { color: #fff; background: rgba(255,255,255,0.06); }
+.modalTitle { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin: 0; }
+.modalSub { font-size: 0.8rem; color: #94a3b8; margin: 0.3rem 0 1rem; }
+
+@keyframes fadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+

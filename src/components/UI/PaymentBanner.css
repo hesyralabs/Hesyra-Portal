@@ -1,0 +1,188 @@
+.payment-banner {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.12) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 16px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.payment-banner.urgent {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(217, 119, 6, 0.12) 100%);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+.payment-banner.overdue {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(185, 28, 28, 0.12) 100%);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.payment-banner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.payment-banner-left {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.payment-icon { color: #60a5fa; flex-shrink: 0; margin-top: 2px; }
+.urgent .payment-icon { color: #fbbf24; }
+.overdue .payment-icon { color: #f87171; }
+
+.payment-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+}
+.payment-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #94a3b8);
+  max-width: 400px;
+}
+.payment-amount {
+  font-size: 1.75rem;
+  font-weight: 300;
+  color: var(--text-primary, #f8fafc);
+  white-space: nowrap;
+}
+
+.payment-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.08);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.urgent .payment-timer { color: #fbbf24; background: rgba(251, 191, 36, 0.08); }
+
+.payment-wallet-deduct {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #a7f3d0;
+  margin-bottom: 1rem;
+}
+
+.payment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.payment-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #3b82f6;
+  color: white;
+  padding: 0.6rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.payment-link-btn:hover { background: #2563eb; }
+
+.payment-simulate-btn {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #a7f3d0;
+  padding: 0.6rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.payment-simulate-btn:hover { background: rgba(16, 185, 129, 0.25); }
+.payment-simulate-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.payment-dispute-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.payment-dispute-btn:hover { background: rgba(251, 191, 36, 0.08); }
+
+.payment-confirmed-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #a7f3d0;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.payment-dispute-active {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fbbf24;
+  font-size: 0.8125rem;
+  background: rgba(251, 191, 36, 0.08);
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+}
+
+/* Dispute Form */
+.dispute-form {
+  margin-top: 1rem;
+  animation: slideDown 0.2s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dispute-form textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #f8fafc);
+  padding: 0.75rem;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  resize: vertical;
+  font-family: inherit;
+}
+.dispute-form textarea:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.dispute-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+.dispute-form-actions button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary, #94a3b8);
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.dispute-submit {
+  background: rgba(251, 191, 36, 0.15) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  color: #fbbf24 !important;
+}

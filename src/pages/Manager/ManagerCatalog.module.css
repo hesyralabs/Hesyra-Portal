@@ -1,0 +1,91 @@
+.container { display: flex; flex-direction: column; gap: 1.5rem; }
+
+.header { display: flex; justify-content: space-between; align-items: flex-start; }
+
+.title {
+  font-size: 1.5rem; font-weight: 300; color: var(--text-primary);
+  display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+}
+
+.subtitle { color: var(--text-secondary); font-size: 0.8rem; }
+
+.statsRow {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;
+}
+
+.stat {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 14px; padding: 1.25rem; text-align: center;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.statVal { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); }
+.statLabel { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); }
+
+.loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
+
+/* Table */
+.table {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 16px; overflow: hidden;
+}
+
+.tableHeader, .tableRow {
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr 1.5fr 0.8fr 0.5fr 0.8fr 1fr 1.2fr 0.6fr;
+  padding: 0.875rem 1.25rem; align-items: center; gap: 8px;
+}
+
+.tableHeader {
+  background: rgba(0,0,0,0.2); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text-secondary); font-weight: 600;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.tableRow {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-size: 0.85rem; color: var(--text-primary);
+  transition: background 0.15s ease;
+}
+
+.tableRow:hover { background: rgba(255,255,255,0.02); }
+.tableRow.inactive { opacity: 0.45; }
+
+.materialName { font-weight: 600; }
+.internalName { color: var(--text-tertiary); font-size: 0.8rem; }
+.category { text-transform: capitalize; color: var(--text-secondary); }
+
+.caseTypes { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.typeBadge {
+  font-size: 0.6rem; padding: 2px 8px; border-radius: 999px;
+  background: rgba(122,156,150,0.12); color: var(--brand-bioceramic);
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+}
+
+.premiumBadge {
+  font-size: 0.7rem; color: #fbbf24; font-weight: 600;
+}
+
+.standardBadge {
+  font-size: 0.7rem; color: var(--text-tertiary);
+}
+
+.price { font-family: monospace; font-size: 0.8rem; }
+.upcharge { color: #fbbf24; font-size: 0.7rem; }
+
+.stockOk { color: #34d399; font-size: 0.75rem; font-weight: 500; }
+
+.stockWarning {
+  color: #fbbf24; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 4px;
+}
+
+.noteBtn {
+  background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+  padding: 4px; margin-left: 4px; border-radius: 4px;
+}
+.noteBtn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+
+.toggleBtn { background: none; border: none; cursor: pointer; padding: 0; }
+.toggleOn { color: #34d399; }
+.toggleOff { color: var(--text-tertiary); }

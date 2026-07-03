@@ -1,0 +1,189 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* ─── Page Header ─── */
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+.headerInfo { display: flex; flex-direction: column; gap: 0.5rem; }
+.pageTitle { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.75px; color: #fff; margin: 0; }
+.pageSubtitle { font-size: 14px; color: #64748b; margin: 0; }
+.pageSubtitle strong { color: #7a9c96; }
+.headerActions { display: flex; align-items: center; gap: 1rem; }
+.searchContainer {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  padding: 0.65rem 1rem; border-radius: 12px; min-width: 280px; color: #64748b;
+}
+.searchContainer:focus-within { border-color: #7a9c96; background: rgba(122,156,150,0.05); }
+.searchContainer input { background: transparent; border: none; color: #fff; font-size: 14px; width: 100%; outline: none; }
+
+/* ─── Metrics Grid ─── */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+.metricTile {
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 18px; padding: 1.1rem; display: flex; flex-direction: column; gap: 0.75rem;
+  transition: all 0.25s;
+}
+.metricTile:hover { transform: translateY(-3px); border-color: var(--metric-color); }
+.metricHeader { display: flex; align-items: center; justify-content: space-between; }
+.metricIcon {
+  width: 36px; height: 36px; border-radius: 10px; background: rgba(0,0,0,0.2);
+  display: flex; align-items: center; justify-content: center; color: var(--metric-color);
+}
+.metricCount { font-size: 1.5rem; font-weight: 700; color: #fff; }
+.metricLabel { font-size: 0.78rem; font-weight: 600; color: #94a3b8; }
+
+/* ─── Sections ─── */
+.sectionBlock { margin-bottom: 0.5rem; }
+.sectionTitle {
+  font-size: 1rem; font-weight: 700; color: #e2e8f0;
+  display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem;
+}
+.sectionCount {
+  font-size: 0.72rem; font-weight: 500; color: #64748b;
+  background: rgba(255,255,255,0.04); padding: 0.15rem 0.5rem; border-radius: 6px; margin-left: auto;
+}
+
+/* ─── Segment Groups (caseType → material) ─── */
+.segmentGroup { margin-bottom: 1.25rem; }
+.segGroupTitle {
+  font-size: 0.72rem; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.5rem; padding-left: 0.25rem;
+}
+
+.segmentCard {
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px; margin-bottom: 0.5rem; overflow: hidden;
+  transition: border-color 0.2s;
+}
+.segmentCard:hover { border-color: rgba(52,211,153,0.2); }
+
+.segHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.85rem 1rem; cursor: pointer; transition: background 0.15s;
+}
+.segHeader:hover { background: rgba(255,255,255,0.02); }
+.segHeaderLeft { display: flex; align-items: center; gap: 0.6rem; color: #94a3b8; }
+.segMaterial { font-weight: 700; color: #e2e8f0; font-size: 0.9rem; }
+.segCount {
+  font-size: 0.72rem; color: #34d399; background: rgba(52,211,153,0.1);
+  padding: 0.15rem 0.5rem; border-radius: 6px; font-weight: 600;
+}
+.segFiles { font-size: 0.7rem; color: #64748b; }
+
+.segActions { display: flex; gap: 0.4rem; }
+
+.btnSmall {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.35rem 0.65rem; border-radius: 8px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  color: #94a3b8; cursor: pointer; font-size: 0.72rem; font-weight: 600;
+  transition: all 0.15s;
+}
+.btnSmall:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.2); }
+
+.btnCreate {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.35rem 0.75rem; border-radius: 8px; border: none;
+  background: rgba(52,211,153,0.12); color: #34d399;
+  cursor: pointer; font-size: 0.72rem; font-weight: 700;
+  transition: all 0.15s;
+}
+.btnCreate:hover { background: rgba(52,211,153,0.2); }
+.btnCreate:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.segCases { padding: 0 0.75rem 0.75rem; }
+.segCaseRow {
+  display: grid; grid-template-columns: 1.5fr 0.75fr 1fr 0.5fr 0.5fr;
+  padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.78rem;
+  color: #94a3b8; text-decoration: none; transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.segCaseRow:last-child { border-bottom: none; }
+.segCaseRow:hover { background: rgba(255,255,255,0.03); }
+.segCaseId { font-weight: 600; color: #e2e8f0; display: flex; align-items: center; gap: 0.35rem; }
+.segShade { color: #a78bfa; }
+.segClinic { color: #64748b; }
+.segDue { color: #fbbf24; font-weight: 500; }
+.segFileCount { color: #64748b; text-align: right; }
+.priorityStar { color: #f59e0b; flex-shrink: 0; }
+
+/* ─── Batch Cards ─── */
+.batchCard {
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px; margin-bottom: 0.5rem; overflow: hidden;
+}
+.batchCard:hover { border-color: rgba(167,139,250,0.2); }
+
+.batchHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.85rem 1rem; cursor: pointer;
+}
+.batchHeader:hover { background: rgba(255,255,255,0.02); }
+.batchLeft { display: flex; align-items: center; gap: 0.6rem; color: #94a3b8; }
+.batchId { font-weight: 700; color: #e2e8f0; font-size: 0.9rem; }
+.batchName { font-size: 0.78rem; color: #64748b; }
+.batchBadge {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.55rem; border-radius: 6px;
+  font-size: 0.68rem; font-weight: 700;
+}
+.batchRight { display: flex; align-items: center; gap: 0.75rem; }
+.batchMeta { font-size: 0.72rem; color: #64748b; }
+
+.batchDetail { padding: 0 1rem 1rem; }
+.batchCaseList {
+  background: rgba(0,0,0,0.15); border-radius: 10px; padding: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.batchCaseRow {
+  display: grid; grid-template-columns: 1.5fr 1fr 0.75fr 0.75fr;
+  padding: 0.4rem 0.6rem; font-size: 0.78rem; color: #e2e8f0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.batchCaseRow:last-child { border-bottom: none; }
+.batchCaseStatus {
+  font-size: 0.68rem; font-weight: 600; color: #a78bfa;
+  text-transform: uppercase;
+}
+
+.batchActions {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.machineInput {
+  padding: 0.4rem 0.65rem; border-radius: 8px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+  color: #f8fafc; font-size: 0.78rem; outline: none; min-width: 180px;
+}
+.machineInput:focus { border-color: rgba(167,139,250,0.4); }
+
+.btnAction {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.4rem 0.75rem; border-radius: 8px; border: none;
+  background: rgba(167,139,250,0.12); color: #a78bfa;
+  cursor: pointer; font-size: 0.78rem; font-weight: 700;
+  transition: all 0.15s;
+}
+.btnAction:hover { background: rgba(167,139,250,0.2); }
+.btnAction:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.batchTime { font-size: 0.7rem; color: #475569; display: flex; align-items: center; gap: 0.3rem; margin-left: auto; }
+
+/* ─── Empty State ─── */
+.emptyQueue {
+  padding: 3rem 2rem; display: flex; flex-direction: column;
+  align-items: center; gap: 0.5rem; color: #475569;
+}
+.emptyQueue h3 { color: #94a3b8; margin: 0.5rem 0 0; }
+.emptyQueue p { font-size: 0.82rem; margin: 0; }
