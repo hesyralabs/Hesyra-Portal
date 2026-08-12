@@ -532,7 +532,75 @@ or `createOrder`, which need an account.
 
 ---
 
-## 8. Open issues / next steps
+## 8. Session log — fourth session
+
+### GST is per case type
+`GST_RATE` was one constant read from a dozen places. Clear aligners are
+taxed at **8%**, everything else stays at **5%**. `config.gstRateFor(caseType)`
+is now the only correct way to ask; reading `GST_RATE` while holding a case
+type is how an aligner gets taxed wrongly. `quoteCase()` returns the rate it
+charged.
+
+Every consumer was updated to ask per case: invoice generation, the
+case-statement export (rows *and* the summary heading, which can no longer
+claim a single rate), and the New Case estimate, which takes the table from
+`/api/catalog/pricing-rules` so it cannot drift from the invoice. Monthly
+credit invoices recover tax **case by case and sum** — a month mixing an
+aligner with crowns cannot be described by one rate, so `gstRate` is null
+there rather than stating one that covers part of the document.
+
+### Designer ↔ dentist channel (aligner cases)
+The assigned CAD designer can message the ordering dentist directly and share
+treatment-plan **video and photographs**, which appear on the dentist's case
+page and play in place. Gated by `DESIGNER_DIRECT_CHAT_CASE_TYPES` and
+`TREATMENT_PLAN_CASE_TYPES` in `lib/config.js` — adding a case type to those
+lists switches both on for it.
+
+**The designer queue is blinded and this necessarily opens part of it.** The
+channel exposes the dentist's *name* to the designer and nothing else; the
+patient and the clinic's finances stay blinded, and no other case type is
+affected.
+
+Found here: `POST /cases/:customId/messages` read the sender off the request
+body, so any signed-in account could post a message attributed to the doctor
+into a thread the clinic reads as a record of what the lab said. Sender is now
+derived from the session. An unassigned designer could also post to any case.
+
+### Dispatch
+`canDispatch()` was written, exported, and **used by zero routes** — so
+`dispatchPermission` did nothing and every technician could dispatch. The
+handover the schema promised ("set the old tech's `dispatchPermission=false`,
+zero API changes") silently did nothing. Now enforced, reading the flag from
+the **database not the JWT**, so a grant takes effect immediately rather than
+at next login. Checked *before* the payment guard.
+
+`packedById` / `dispatchedById` now record who did it, shown on the case and
+in the admin export.
+
+### Formal tax invoice
+`lib/invoiceDocument.js` renders a real GST invoice as a PDF — seller/buyer,
+place of supply, per-case lines each at their own rate, CGST+SGST or IGST,
+total in words. Emailed on generation with the PDF attached
+(`lib/invoiceMailer.js`), and on the clinic's Billing page to view or re-send.
+
+**Delivery never fails the invoice.** `sendInvoice()` does not throw; the
+document exists and is downloadable regardless. An invoice against a
+placeholder GSTIN prints *"NOT A VALID TAX INVOICE"* on its face and is
+refused for email.
+
+Found here: `GET /api/invoices` returned **every invoice in the database to
+any authenticated account** — any clinic could read every other clinic's
+invoice numbers, amounts and practice names off its own billing page. Now
+scoped by `userId`. The billing page also built its own PDF in the browser,
+inventing line amounts by dividing the total evenly, using a 12% GST fallback
+the catalogue has never charged, and always printing CGST+SGST. Replaced by
+the server renderer — which also removed `html2pdf.js` and took the bundle
+from 2,772 kB to 1,837 kB. Its amount column showed the *taxable* value under
+a header reading "incl. GST".
+
+---
+
+## 9. Open issues / next steps
 
 ### Launch blockers
 1. **Live Razorpay has never touched a real Razorpay account.** The code is
@@ -546,17 +614,26 @@ or `createOrder`, which need an account.
    — the server will not start in live mode without a valid one — but the real
    number still has to be supplied. Note its first two digits pick the state
    for every CGST/SGST vs IGST decision.
-3. **There is no invoice document.** `generateGSTInvoiceData()` is exported and
-   never called: invoices exist only as database rows, and `routes/invoices.js`
-   is list/edit/delete. Nothing renders a PDF or printable tax invoice for a
-   clinic. Found in the third session, not fixed.
-4. **`Invoice.amount` means two different things.** Per-case rows store the
-   taxable value; monthly rows store the GST-inclusive gross, and
-   `handleCreditPayment()` depends on the latter. Any revenue total summing
-   the column across both types is wrong. Left alone because fixing it touches
-   the outstanding-balance arithmetic and the UI, and wants a decision.
+3. **SMTP is not configured**, so no invoice has ever actually been emailed.
+   The path is built and reports honestly when it cannot send. Set
+   `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM` and send one real invoice before
+   launch.
+4. **`Invoice.amount` still means two different things.** Per-case rows store
+   the taxable value; monthly rows store the GST-inclusive gross, and
+   `handleCreditPayment()` depends on the latter. Every *reader* added since
+   normalises it (`buildInvoiceData`, `GET /api/invoices` → `grossPaise`), so
+   nothing user-facing is wrong today — but any new code summing the column
+   across both types will be. Fixing the column itself touches the
+   outstanding-balance arithmetic and wants a decision.
 5. `npm audit` reports 19 vulnerabilities (9 high) in the server tree.
    Pre-existing, not reviewed.
+
+### Product decisions
+- **8% GST on aligners was confirmed by the client**, and is not one of
+  India's standard slabs (0/5/12/18/28). It is set in one place —
+  `GST_RATE_BY_CASE_TYPE` in `lib/config.js` — if that turns out to be wrong.
+- The designer↔dentist channel partly un-blinds the designer queue on aligner
+  cases, by design. See §8.
 
 ### Product decisions to make
 - **A crown credit zeroes whatever crown it is applied to, regardless of
@@ -588,7 +665,7 @@ or `createOrder`, which need an account.
 
 ---
 
-## 9. Working style that was asked for
+## 10. Working style that was asked for
 
 - **Verify in the browser, not just the build.** A build passing means
   nothing — an un-imported icon is a runtime error that builds clean and
