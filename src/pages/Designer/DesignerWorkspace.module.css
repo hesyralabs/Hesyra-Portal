@@ -53,6 +53,64 @@
 .designFileName { font-size: 0.75rem; color: var(--text-primary); font-weight: 500; text-align: center; word-break: break-all; }
 .designFileSize { font-size: 0.6875rem; color: var(--text-tertiary); }
 
+/* ─── Direct channel with the dentist (aligner cases) ──────────
+   Given its own accent edge so it reads as a different kind of thing
+   from the internal note directly below it: one is a conversation the
+   clinic can see, the other is a note to the bench. Confusing those
+   two is how a private remark ends up in front of a customer. */
+.channelSection {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--accent-primary, #7A9C96);
+  border-radius: 18px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.channelHeader { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1rem; }
+.channelHeader .designFileHeader { margin-bottom: 0; }
+.channelNote { font-size: 0.75rem; color: var(--text-secondary); }
+
+.planBlock {
+  background: rgba(0,0,0,0.18);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 0.875rem;
+  margin-bottom: 1rem;
+}
+.planHeader {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  font-size: 0.8125rem; font-weight: 700; color: var(--text-secondary);
+}
+.planUploadBtn {
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  background: transparent; border: 1px solid var(--glass-border); border-radius: 8px;
+  padding: 0.375rem 0.625rem; color: var(--text-primary);
+  font-size: 0.75rem; font-family: inherit; cursor: pointer;
+}
+.planUploadBtn:hover:not(:disabled) { border-color: var(--accent-primary, #7A9C96); }
+.planUploadBtn:disabled { opacity: 0.5; cursor: default; }
+
+.planEmpty { margin: 0.75rem 0 0; font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5; }
+
+.planGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
+.planCard {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.625rem; border: 1px solid var(--glass-border); border-radius: 10px;
+  text-decoration: none; color: var(--text-primary); font-size: 0.75rem;
+}
+.planCard:hover { border-color: var(--accent-primary, #7A9C96); }
+.planKind { font-size: 0.625rem; letter-spacing: 0.08em; color: var(--text-secondary); }
+.planName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The thread scrolls inside itself so a long conversation cannot push
+   the reply box off the bottom of the workspace. */
+.channelThread { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.625rem; }
+.msgMine, .msgTheirs { max-width: 85%; padding: 0.5rem 0.75rem; border-radius: 12px; font-size: 0.8125rem; }
+.msgMine   { align-self: flex-end; background: rgba(122,156,150,0.16); border: 1px solid rgba(122,156,150,0.3); }
+.msgTheirs { align-self: flex-start; background: rgba(0,0,0,0.22); border: 1px solid var(--glass-border); }
+.msgMeta   { font-size: 0.6875rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+.msgText   { color: var(--text-primary); line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+
 /* Note */
 .noteSection { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 18px; padding: 1.25rem; }
 .noteInput { display: flex; gap: 0.75rem; align-items: flex-end; margin-top: 0.75rem; }

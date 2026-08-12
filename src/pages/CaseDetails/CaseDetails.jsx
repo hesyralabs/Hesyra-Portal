@@ -91,6 +91,22 @@ const CaseDetails = () => {
   // Read directly from cases array — guarantees re-render on ANY case state change
   const caseData = cases.find(c => c.id === id);
 
+  // Treatment plan media the designer shared for the dentist to watch.
+  // Distinct from `design` files, which are lab working files.
+  const treatmentPlan = (caseData?.files || []).filter(f => f.category === 'treatment_plan');
+  const hasDesignerChannel = (caseData?.messages || []).some(m => m.from === 'designer')
+    || treatmentPlan.length > 0;
+
+  // Who a message is from, in the dentist's own terms. The designer is
+  // named because on an aligner case they are the person whose judgement
+  // is being discussed; the rest of the lab stays collective.
+  const senderLabel = (msg) => {
+    if (msg.from === 'doctor') return 'You';
+    if (msg.from === 'designer') return msg.authorName ? `${msg.authorName} · Designer` : 'Your designer';
+    if (msg.from === 'manager') return msg.authorName || 'Lab manager';
+    return 'Hesyra Lab';
+  };
+
   const doAction = useCallback((fn) => {
     if (processing) return;
     setProcessing(true);
@@ -646,20 +662,76 @@ const CaseDetails = () => {
                   <span>{caseData.trackingCourier || caseData.tracking?.courier}</span>
                   <span className={styles.trackingNumber}>{caseData.trackingNumber || caseData.tracking?.number}</span>
                 </div>
+                {/* Named, not anonymous: a parcel query has a person to
+                    ask. Only rendered once somebody actually has. */}
+                {caseData.dispatchedBy && (
+                  <span className={styles.dispatchedByLine}>
+                    Handed over by {caseData.dispatchedBy.name}
+                    {caseData.packedBy && caseData.packedBy.id !== caseData.dispatchedBy.id
+                      ? ` · packed by ${caseData.packedBy.name}`
+                      : ''}
+                  </span>
+                )}
               </div>
             )}
           </div>
 
+          {/* ══════ TREATMENT PLAN ══════
+              What the designer wants you to look at before they build
+              it. Only rendered when something has been shared, so a
+              case without one shows no empty shelf. */}
+          {treatmentPlan.length > 0 && (
+            <div className={styles.card}>
+              <h2 className={styles.cardTitle}>Treatment Plan</h2>
+              <p className={styles.planIntro}>
+                Shared by your designer. Reply below with anything you want changed.
+              </p>
+              <div className={styles.planMedia}>
+                {treatmentPlan.map((f) => (
+                  <figure key={f.id} className={styles.planItem}>
+                    {f.mimetype?.startsWith('video/') ? (
+                      // Plays in place. A staged aligner sequence is a
+                      // motion — making the dentist download a file to
+                      // see it is most of the reason plans go unwatched.
+                      <video
+                        className={styles.planVideo}
+                        src={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${f.url}`}
+                        controls
+                        preload="metadata"
+                        playsInline
+                      />
+                    ) : (
+                      <a href={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${f.url}`} target="_blank" rel="noopener noreferrer">
+                        <img className={styles.planImage} src={`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${f.url}`} alt={f.name} loading="lazy" />
+                      </a>
+                    )}
+                    <figcaption className={styles.planCaption}>{f.name}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ══════ CHAT ══════ */}
           <div className={`${styles.card} ${styles.chatCard}`}>
-            <h2 className={styles.cardTitle}>Case Messaging</h2>
+            <h2 className={styles.cardTitle}>
+              {hasDesignerChannel ? 'Messages — you, the lab and your designer' : 'Case Messaging'}
+            </h2>
             <div className={caseData.messages.length ? styles.chatArea : styles.chatEmpty}>
               {caseData.messages.length === 0 && (
-                <>Ask the lab anything about this case — they reply here.</>
+                hasDesignerChannel
+                  ? <>Your designer can answer plan questions here directly.</>
+                  : <>Ask the lab anything about this case — they reply here.</>
               )}
               {caseData.messages.map((msg, idx) => (
-                <div key={idx} className={msg.from === 'doctor' ? styles.messageDoctor : styles.messageLab}>
-                  <strong>{msg.from === 'doctor' ? 'You' : 'Lab Tech'}:</strong> {msg.text}
+                <div
+                  key={msg.id || idx}
+                  className={msg.from === 'doctor' ? styles.messageDoctor : styles.messageLab}
+                >
+                  {/* Who is talking matters once a third party is in the
+                      thread: "Lab Tech" on a message from the designer
+                      handling your aligner plan is simply wrong. */}
+                  <strong>{senderLabel(msg)}:</strong> {msg.text}
                   <span className={styles.msgTime}>{msg.time}</span>
                 </div>
               ))}

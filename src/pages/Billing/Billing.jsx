@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { CreditCard, Download, FileText, CheckCircle2, Clock, AlertCircle, Wallet, ArrowRightLeft, Shield, Settings } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+import { CreditCard, Download, FileText, CheckCircle2, Clock, AlertCircle, Wallet, ArrowRightLeft, Shield, Settings, Mail } from 'lucide-react';
 import WalletCard from '../../components/UI/WalletCard';
 import StrikeBadge from '../../components/UI/StrikeBadge';
 import { useCases } from '../../context/CaseContext';
@@ -13,122 +12,80 @@ const Billing = () => {
   const { user } = useAuth();
   const { wallet, trustStatus, paiseToINR, setPaymentMode, simulatePayment, refreshWallet } = usePayment();
   const [activeTab, setActiveTab] = useState('unpaid');
+  const [emailing, setEmailing] = useState(null);
+  const [notice, setNotice] = useState(null);
 
-  const userInvoices = invoices.filter(inv => inv.clinic === user?.clinic);
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  // GET /api/invoices is scoped to the caller server-side, so what
+  // arrives here is already only this clinic's.
+  //
+  // This used to re-filter on `inv.clinic === user?.clinic`, matching a
+  // free-text practice name. That was never what kept one clinic's
+  // invoices off another's screen — the API returned everybody's — and
+  // it silently emptied the page whenever the two strings disagreed or
+  // `user` had not resolved yet. Ownership is enforced by userId at the
+  // API; the client just renders what it is given.
+  const userInvoices = invoices;
   const filteredInvoices = userInvoices.filter(inv => activeTab === 'all' || inv.status === activeTab);
-  const totalDue = userInvoices.filter(inv => inv.status === 'unpaid').reduce((sum, inv) => sum + inv.amount, 0);
+  // What is actually owed, tax included — the same figure the payment
+  // link asks for. Summing `amount` understated it by the GST.
+  const totalDue = userInvoices
+    .filter(inv => inv.status === 'unpaid')
+    .reduce((sum, inv) => sum + (inv.grossPaise ?? Math.round(inv.amount * 100)), 0) / 100;
 
+  // The invoice PDF is rendered by the server, not here.
+  //
+  // This used to build the document in the browser with html2pdf, and
+  // it could not have been right: it split the invoice total evenly
+  // across its cases to invent line amounts, fell back to a 12% GST
+  // rate the catalogue has never charged, and always printed
+  // CGST + SGST — so an inter-state clinic received a document showing
+  // a tax it did not pay. One renderer, server-side, built from the
+  // figures the clinic was actually charged.
   const handleDownloadPDF = async (inv) => {
-    const caseItems = (inv.cases || []).map(caseId => {
-      return { id: caseId, desc: 'Digital Manufacturing Services', amount: inv.amount / (inv.cases?.length || 1) };
-    });
+    setNotice(null);
+    try {
+      const token = sessionStorage.getItem('hesyra_token');
+      const res = await fetch(`${API}/api/invoices/${inv.id}/pdf?download=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('fetch failed');
 
-    const subtotal = inv.amount;
-    const gstRate = inv.gstRate || 0.12;
-    const taxableAmount = subtotal / (1 + gstRate);
-    const taxAmount = subtotal - taxableAmount;
-    const cgst = taxAmount / 2;
-    const sgst = taxAmount / 2;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Hesyra-Invoice-${inv.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setNotice({ kind: 'error', text: 'Could not download that invoice. Please try again.' });
+    }
+  };
 
-    const element = document.createElement('div');
-    element.style.padding = '40px 50px';
-    element.style.fontFamily = '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif';
-    element.style.color = '#1e293b';
-    element.style.background = '#ffffff';
-    element.style.width = '794px';
-    element.style.boxSizing = 'border-box';
-    
-    element.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #001A33; padding-bottom: 24px; margin-bottom: 32px;">
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <div style="width: 48px; height: 48px; background: #001A33; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #7A9C96; font-weight: bold; font-size: 24px; font-family: serif;">H</div>
-          <div>
-            <h1 style="margin: 0; color: #001A33; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">Hesyra Dental Lab</h1>
-            <p style="margin: 4px 0 0; color: #64748b; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">Precision Digital Manufacturing</p>
-            <p style="margin: 2px 0 0; color: #94a3b8; font-size: 11px;">GSTIN: ${inv.gstin || '27XXXXX0000X1Z5'}</p>
-          </div>
-        </div>
-        <div style="text-align: right;">
-          <h2 style="margin: 0; color: #0f172a; font-size: 32px; font-weight: 300; letter-spacing: 2px;">TAX INVOICE</h2>
-          <p style="margin: 8px 0 0; font-weight: 600; font-family: monospace; color: #334155; font-size: 16px;">#${inv.id}</p>
-          <p style="margin: 4px 0 0; color: #64748b; font-size: 13px;">Date: ${inv.date}</p>
-        </div>
-      </div>
-      
-      <div style="display: flex; justify-content: space-between; margin-bottom: 40px; font-size: 14px; line-height: 1.6;">
-        <div>
-          <h3 style="margin: 0 0 12px; color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Billed To</h3>
-          <p style="margin: 0; font-weight: 600; color: #0f172a; font-size: 16px;">${user?.clinic || 'Hesyra Client'}</p>
-          <p style="margin: 4px 0 0; color: #475569;">${user?.name || 'Dr. Dentist'}</p>
-        </div>
-        <div style="text-align: right;">
-          <h3 style="margin: 0 0 12px; color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Payment Status</h3>
-          <div style="display: inline-block; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; 
-            background: ${inv.status === 'paid' ? '#dcfce7' : '#fee2e2'}; 
-            color: ${inv.status === 'paid' ? '#166534' : '#991b1b'};">
-            ${inv.status.toUpperCase()}
-          </div>
-        </div>
-      </div>
-
-      <table style="width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 32px; font-size: 13px;">
-        <thead>
-          <tr>
-            <th style="padding: 14px 16px; background: #f8fafc; text-align: left; border-top-left-radius: 8px; border-bottom-left-radius: 8px; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Item / HSN</th>
-            <th style="padding: 14px 16px; background: #f8fafc; text-align: right; border-top-right-radius: 8px; border-bottom-right-radius: 8px; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${caseItems.map(item => `
-            <tr>
-              <td style="padding: 16px; border-bottom: 1px solid #e2e8f0;">
-                <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">${item.id}</div>
-                <div style="color: #64748b; font-size: 12px;">${item.desc} | HSN: ${inv.hsnCode || '9021'}</div>
-              </td>
-              <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 500; color: #334155;">
-                ₹${item.amount.toFixed(2)}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div style="display: flex; justify-content: flex-end; margin-bottom: 48px;">
-        <div style="width: 320px; background: #f8fafc; padding: 24px; border-radius: 12px;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #64748b; font-size: 14px;">
-            <span>Taxable Amount</span>
-            <span style="color: #334155; font-weight: 500;">₹${taxableAmount.toFixed(2)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; color: #64748b; font-size: 14px;">
-            <span>CGST (${(gstRate * 50).toFixed(0)}%)</span>
-            <span style="color: #334155; font-weight: 500;">₹${cgst.toFixed(2)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 16px; color: #64748b; font-size: 14px;">
-            <span>SGST (${(gstRate * 50).toFixed(0)}%)</span>
-            <span style="color: #334155; font-weight: 500;">₹${sgst.toFixed(2)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding-top: 16px; border-top: 1px solid #cbd5e1; color: #0f172a; font-size: 18px; font-weight: 700;">
-            <span>Total (Incl. GST)</span>
-            <span>₹${subtotal.toFixed(2)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 24px;">
-        <p style="margin: 0 0 8px;">This is a computer-generated invoice. No signature required.</p>
-        <p style="margin: 0;">Hesyra Labs | Amravati, Maharashtra | contact@hesyra.com</p>
-      </div>
-    `;
-
-    const opt = {
-      margin: 0,
-      filename: `Hesyra_Invoice_${inv.id}.pdf`,
-      image: { type: 'jpeg', quality: 1.0 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opt).from(element).save();
+  // Email a copy to the address on the account. Reports what actually
+  // happened — an unconfigured mail server says so rather than letting
+  // the button claim a send that never left.
+  const handleEmail = async (inv) => {
+    setEmailing(inv.id);
+    setNotice(null);
+    try {
+      const token = sessionStorage.getItem('hesyra_token');
+      const res = await fetch(`${API}/api/invoices/${inv.id}/email`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) setNotice({ kind: 'ok', text: `Invoice ${inv.id} sent to ${body.sentTo}.` });
+      else setNotice({ kind: 'error', text: body.error || 'Could not send that invoice.' });
+    } catch {
+      setNotice({ kind: 'error', text: 'Could not send that invoice.' });
+    } finally {
+      setEmailing(null);
+    }
   };
 
   return (
@@ -223,6 +180,16 @@ const Billing = () => {
           </button>
         </div>
 
+        {/* Outcome of a download or send. Shown here rather than as a
+            toast because "your mail server is not configured" is a
+            sentence somebody needs to be able to read twice. */}
+        {notice && (
+          <div className={notice.kind === 'ok' ? styles.noticeOk : styles.noticeError}>
+            {notice.text}
+            <button className={styles.noticeClose} onClick={() => setNotice(null)} aria-label="Dismiss">×</button>
+          </div>
+        )}
+
         <div className={styles.tableContainer}>
           <table className={styles.table}>
             <thead>
@@ -253,7 +220,15 @@ const Billing = () => {
                     <td className={styles.casesCell}>
                       {(inv.cases || []).map(c => <span key={c} className={styles.caseTag}>{c}</span>)}
                     </td>
-                    <td className={styles.amountCell}>₹{inv.amount.toFixed(2)}</td>
+                    {/* The column says "incl. GST", so show the gross.
+                        `inv.amount` is the TAXABLE value on a per-case
+                        invoice, so this cell was understating every one
+                        of them by the tax — ₹1,800 where ₹1,890 was
+                        charged. grossPaise is computed server-side and
+                        is correct for both invoice types. */}
+                    <td className={styles.amountCell}>
+                      ₹{((inv.grossPaise ?? Math.round(inv.amount * 100)) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
                     <td>
                       <span className={`${styles.statusBadge} ${styles[inv.status]}`}>
                         {inv.status === 'paid' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
@@ -261,8 +236,16 @@ const Billing = () => {
                       </span>
                     </td>
                     <td className={styles.actionCell}>
-                      <button className={styles.downloadBtn} title="Download GST Invoice PDF" onClick={() => handleDownloadPDF(inv)}>
+                      <button className={styles.downloadBtn} title="Download tax invoice (PDF)" onClick={() => handleDownloadPDF(inv)}>
                         <Download size={16} />
+                      </button>
+                      <button
+                        className={styles.downloadBtn}
+                        title={inv.emailedAt ? 'Email me another copy' : 'Email me this invoice'}
+                        onClick={() => handleEmail(inv)}
+                        disabled={emailing === inv.id}
+                      >
+                        <Mail size={16} />
                       </button>
                     </td>
                   </tr>

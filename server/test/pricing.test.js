@@ -191,13 +191,55 @@ check('finishing — a bridge scales the upcharge per unit', () => {
 });
 
 // ─── GST is added on top, once, at the bottom ────────────────────
-check('GST rate is 5%', () => assert.equal(config.GST_RATE, 0.05));
+// The rate is not universal: dental prosthetics are 5%, clear aligners
+// are 8%. Anything that reads config.GST_RATE while holding a case type
+// taxes aligners wrongly, so these tests pin both.
+check('GST — dental prosthetics are 5%', () => assert.equal(config.GST_RATE, 0.05));
+
+check('GST — clear aligners are 8%', () => assert.equal(config.gstRateFor('aligner'), 0.08));
+
+check('GST — an unlisted case type falls back to the prosthetics rate', () => {
+  assert.equal(config.gstRateFor('crown_bridge'), 0.05);
+  assert.equal(config.gstRateFor('surgical_guide'), 0.05);
+  assert.equal(config.gstRateFor('retainer'), 0.05);
+  assert.equal(config.gstRateFor(undefined), 0.05);
+});
 
 check('quoteCase — GST is added on top of the net, not carved out of it', () => {
   const q = pricing.quoteCase({ caseType: 'crown_bridge', sku: PREMIUM, toothCount: 1 });
   assert.equal(q.netPaise, R(1500));
   assert.equal(q.gstPaise, R(75));
   assert.equal(q.totalPaise, R(1575));
+});
+
+check('quoteCase — a Standard aligner case is taxed at 8%, not 5%', () => {
+  const q = pricing.quoteCase({ caseType: 'aligner', alignerTier: 'standard' });
+  assert.equal(q.netPaise, R(36000));
+  assert.equal(q.gstRate, 0.08);
+  assert.equal(q.gstPaise, R(2880));
+  assert.equal(q.totalPaise, R(38880));
+});
+
+check('quoteCase — an Executive aligner case is taxed at 8%', () => {
+  const q = pricing.quoteCase({ caseType: 'aligner', alignerTier: 'executive' });
+  assert.equal(q.netPaise, R(91000));
+  assert.equal(q.gstPaise, R(7280));
+  assert.equal(q.totalPaise, R(98280));
+});
+
+check('quoteCase — a retainer is NOT an aligner and stays at 5%', () => {
+  const q = pricing.quoteCase({
+    caseType: 'retainer',
+    sku: sku('retainer_clear', 'Clear Retainer', R(750)),
+  });
+  assert.equal(q.netPaise, R(750));
+  assert.equal(q.gstRate, 0.05);
+  assert.equal(q.gstPaise, Math.round(R(750) * 0.05));
+});
+
+check('quoteCase — the rate charged is reported back with the quote', () => {
+  assert.equal(pricing.quoteCase({ caseType: 'aligner', alignerTier: 'premium' }).gstRate, 0.08);
+  assert.equal(pricing.quoteCase({ caseType: 'crown_bridge', sku: PRO, toothCount: 1 }).gstRate, 0.05);
 });
 
 check('quoteCase — total is always net + GST across a multi-line quote', () => {

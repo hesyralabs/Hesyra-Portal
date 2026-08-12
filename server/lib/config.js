@@ -56,6 +56,30 @@ module.exports = {
   // surgical guides, space maintainers — and goes print → QC → pack.
   CERAMIC_FINISHING_CASE_TYPES: ['crown_bridge', 'veneer', 'denture', 'inlay_onlay'],
 
+  // ─── Designer ↔ dentist direct channel ────────────────────
+  // Most case types are a handoff: the dentist sends a prescription and
+  // the lab sends back a crown, and anything in between goes through
+  // the lab's own chat. An aligner plan is not that — it is a course of
+  // treatment the designer and the dentist agree on, over several
+  // rounds, before anything is printed. Routing that through the lab
+  // adds a relay to every exchange.
+  //
+  // These case types let the assigned CAD designer message the ordering
+  // dentist directly, and share treatment-plan video and photographs
+  // the dentist can see on the case. Adding a case type here switches
+  // both on for it; nothing else needs to change.
+  DESIGNER_DIRECT_CHAT_CASE_TYPES: ['aligner'],
+  TREATMENT_PLAN_CASE_TYPES:       ['aligner'],
+
+  // What a designer may share as a treatment plan. Video is the point —
+  // a stepped aligner sequence is a motion, and a still of it is a
+  // still of one step.
+  TREATMENT_PLAN_MAX_BYTES:  200 * 1024 * 1024,   // 200 MB
+  TREATMENT_PLAN_MIMETYPES: [
+    'video/mp4', 'video/quicktime', 'video/webm',
+    'image/jpeg', 'image/png', 'image/webp',
+  ],
+
   // ─── Strike system ────────────────────────────────────────
   STRIKE_DAYS_THRESHOLD:  7,    // Days after READY before strike
   REMINDER_DAYS:          [2, 5, 6], // Days to send reminders
@@ -63,10 +87,31 @@ module.exports = {
   PERMANENT_BAN_STRIKES:  6,    // Second suspension = permanent ban
 
   // ─── GST & Invoice ────────────────────────────────────────
-  // Published prices are exclusive of GST; 5% is added on top.
+  // Published prices are exclusive of GST; it is added on top.
   // (Hesyra Introductory Price List, July 2026.)
-  GST_RATE:       0.05,        // 5%
+  //
+  // GST_RATE is the default for dental prosthetics. It is NOT the only
+  // rate: clear aligners are taxed differently, so never reach for
+  // GST_RATE directly when a case type is in hand — call gstRateFor()
+  // instead. Reading the constant is how a case gets taxed at the
+  // wrong rate, and a wrong rate means a credit note and a reissue.
+  GST_RATE:       0.05,        // 5% — dental prosthetics
   HSN_CODE:       '9021',      // Dental prosthetics
+
+  // Case types whose GST differs from the default. Anything absent
+  // from this table is taxed at GST_RATE.
+  GST_RATE_BY_CASE_TYPE: {
+    aligner: 0.08,   // 8% — clear aligners
+  },
+
+  /**
+   * The GST rate that applies to a case type.
+   * Falls back to the prosthetics rate for anything unlisted.
+   */
+  gstRateFor(caseType) {
+    const rate = this.GST_RATE_BY_CASE_TYPE[caseType];
+    return rate === undefined ? this.GST_RATE : rate;
+  },
 
   // The registration the invoices are issued under. Its first two
   // digits are the state code, and resolveTaxTreatment() reads them to

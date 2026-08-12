@@ -699,6 +699,15 @@
   word-break: break-all;
 }
 
+/* Attribution sits under the parcel, quieter than it — it answers a
+   follow-up question rather than being the thing you came to read. */
+.dispatchedByLine {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* Button icon support */
 .btnSuccessFill,
 .btnWarningOutline,
@@ -717,3 +726,40 @@
   pointer-events: none;
 }
 
+
+/* ─── Treatment plan (aligner cases) ──────────────────────────
+   Video plays in place. Making a dentist download a file to watch a
+   staged sequence is most of the reason plans go unwatched. */
+.planIntro {
+  margin: 0 0 1rem;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.planMedia {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.planItem { margin: 0; }
+
+.planVideo,
+.planImage {
+  width: 100%;
+  max-height: 320px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.35);
+  display: block;
+  object-fit: contain;
+}
+
+.planCaption {
+  margin-top: 0.5rem;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

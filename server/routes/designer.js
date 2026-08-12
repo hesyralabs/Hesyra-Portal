@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const prisma = require('../lib/prisma');
+const config = require('../lib/config');
 const { authenticate, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -42,7 +43,7 @@ function serializeFile(f) {
     name:       f.filename,
     url:        `/uploads/${path.basename(f.path)}`,
     size:       f.size,
-    category:   f.category,        // 'scan' | 'design'
+    category:   f.category,        // 'scan' | 'design' | 'treatment_plan'
     mimetype:   f.mimetype,
     uploadedBy: f.uploadedBy,      // 'clinic' | 'cad_designer' | 'technician'
     createdAt:  f.createdAt,
@@ -59,6 +60,8 @@ async function getOwnedCase(caseCustomId, designerId) {
     include: {
       files:    { orderBy: { createdAt: 'asc' } },   // ← ALL categories, not just 'design'
       timeline: { orderBy: { createdAt: 'asc' } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
+      doctor:   { select: { id: true, name: true, clinic: true } },
     },
   });
 
@@ -139,6 +142,16 @@ router.get('/cases/:id', async (req, res) => {
     const allFiles   = c.files.map(serializeFile);
     const scanFiles   = allFiles.filter(f => f.category === 'scan');
     const designFiles = allFiles.filter(f => f.category === 'design');
+    const treatmentPlanFiles = allFiles.filter(f => f.category === 'treatment_plan');
+
+    // The designer queue is blinded — no patient, no clinic, no money.
+    // On the case types that get a direct channel, that blinding cannot
+    // hold for the two people in the conversation: the dentist signs
+    // their own messages. So the channel opens the dentist's name to
+    // the designer and nothing else. The patient stays blinded, the
+    // clinic's finances stay blinded, and every other case type is
+    // untouched.
+    const directChannel = config.DESIGNER_DIRECT_CHAT_CASE_TYPES.includes(c.caseType);
 
     res.json({
       customId:       c.customId,
@@ -157,7 +170,25 @@ router.get('/cases/:id', async (req, res) => {
       // Files split by category — frontend can render them separately
       scanFiles,
       designFiles,
+      treatmentPlanFiles,
       files: allFiles, // also expose flat list for backwards compat
+
+      // ─── Direct channel with the ordering dentist ───────────
+      directChannel,
+      doctorName: directChannel ? c.doctor?.name || null : null,
+      messages: directChannel
+        ? c.messages.map(m => ({
+            id:   m.id,
+            from: m.from,
+            authorName: m.user?.name || null,
+            text: m.text,
+            time: new Date(m.createdAt).toLocaleString('en-IN', {
+              day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+            }),
+            createdAt: m.createdAt,
+          }))
+        : [],
+
       timeline: c.timeline.map(t => ({
         label: t.label,
         info:  t.info,
@@ -169,6 +200,151 @@ router.get('/cases/:id', async (req, res) => {
   } catch (err) {
     console.error('GET /designer/cases/:id error:', err);
     res.status(500).json({ error: 'Failed to fetch case' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// TREATMENT PLAN — video and stills shared with the dentist
+// ═══════════════════════════════════════════════════════════════
+
+// A separate multer instance: the design uploader accepts meshes and
+// rejects video, and a treatment plan is mostly video. Sharing one
+// filter would mean loosening the design pipeline to accept .mp4,
+// which is not what that route is for.
+const planUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    filename: (req, file, cb) => {
+      const unique = Date.now() + '-' + Math.round(Math.random() * 1e6);
+      cb(null, `plan-${req.params.id}-${unique}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: config.TREATMENT_PLAN_MAX_BYTES },
+  fileFilter: (req, file, cb) => {
+    if (config.TREATMENT_PLAN_MIMETYPES.includes(file.mimetype)) return cb(null, true);
+    cb(new Error(`${file.mimetype || 'That file type'} cannot be shared as a treatment plan. Use MP4, MOV, WebM, JPEG, PNG or WebP.`));
+  },
+});
+
+// ─── POST /api/designer/cases/:id/treatment-plan ───────────────
+// Share the plan with the ordering dentist. Unlike design files —
+// which are lab-internal working files — anything uploaded here is
+// meant to be watched by the dentist, and shows on their case page.
+router.post('/cases/:id/treatment-plan', planUpload.array('files', 6), async (req, res) => {
+  const cleanup = () => (req.files || []).forEach(f => { try { fs.unlinkSync(f.path); } catch (e) {} });
+
+  try {
+    const c = await getOwnedCase(req.params.id, req.user.id);
+    if (!c) { cleanup(); return res.status(404).json({ error: 'Case not found or not assigned to you' }); }
+
+    if (!config.TREATMENT_PLAN_CASE_TYPES.includes(c.caseType)) {
+      cleanup();
+      return res.status(400).json({
+        error: 'Treatment plans are shared on aligner cases only.',
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    // Same executable-content check the design uploader runs. A file
+    // the dentist is invited to open is exactly the one worth checking.
+    for (const file of req.files) {
+      const buffer = Buffer.alloc(8);
+      const fd = fs.openSync(file.path, 'r');
+      fs.readSync(fd, buffer, 0, 8, 0);
+      fs.closeSync(fd);
+      const hex = buffer.toString('hex').toUpperCase();
+      if (hex.startsWith('4D5A') || hex.startsWith('7F454C46') || hex.startsWith('2321')) {
+        cleanup();
+        return res.status(400).json({ error: `File ${file.originalname} contains prohibited executable content.` });
+      }
+    }
+
+    const created = await prisma.$transaction(
+      req.files.map(f => prisma.caseFile.create({
+        data: {
+          filename:   f.originalname,
+          path:       f.path,
+          size:       f.size,
+          mimetype:   f.mimetype,
+          category:   'treatment_plan',
+          uploadedBy: 'cad_designer',
+          caseId:     c.id,
+        },
+      }))
+    );
+
+    const noun = created.length === 1 ? 'a treatment plan' : `${created.length} treatment plan files`;
+    await prisma.timeline.create({
+      data: {
+        caseId: c.id,
+        label:  'Treatment plan shared with the clinic',
+        info:   `${req.user.name || 'The designer'} shared ${noun}.`,
+      },
+    });
+
+    const io = req.app.get('io');
+    if (io) io.emit('case:updated', { customId: c.customId });
+
+    res.status(201).json({ success: true, files: created.map(serializeFile) });
+  } catch (err) {
+    cleanup();
+    console.error('POST /designer/cases/:id/treatment-plan error:', err);
+    res.status(500).json({ error: err.message || 'Failed to share treatment plan' });
+  }
+});
+
+// ─── POST /api/designer/cases/:id/messages ─────────────────────
+// Message the ordering dentist directly. Gated to the case types with
+// a direct channel, and to the designer actually holding the case.
+router.post('/cases/:id/messages', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: 'Message cannot be empty' });
+    }
+
+    const c = await getOwnedCase(req.params.id, req.user.id);
+    if (!c) return res.status(404).json({ error: 'Case not found or not assigned to you' });
+
+    if (!config.DESIGNER_DIRECT_CHAT_CASE_TYPES.includes(c.caseType)) {
+      return res.status(403).json({
+        error: 'Direct messaging with the clinic is available on aligner cases only.',
+      });
+    }
+
+    const message = await prisma.message.create({
+      data: { text: String(text).trim(), from: 'designer', caseId: c.id, userId: req.user.id },
+      include: { user: { select: { name: true } } },
+    });
+
+    const io = req.app.get('io');
+    if (io) io.emit('case:message', {
+      customId: c.customId,
+      message: {
+        id: message.id,
+        from: 'designer',
+        authorName: message.user?.name || null,
+        text: message.text,
+        time: new Date(message.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: {
+        id: message.id,
+        from: 'designer',
+        authorName: message.user?.name || null,
+        text: message.text,
+        createdAt: message.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error('POST /designer/cases/:id/messages error:', err);
+    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 

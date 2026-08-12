@@ -173,12 +173,38 @@ function requirePermission(permission) {
 // Dispatch is checked against the dispatchPermission FLAG, not the role.
 // This is what makes the Technician→Dispatch split a config change, not
 // a code change. Always use this. Never do: role === 'dispatch'.
-function canDispatch(req, res, next) {
+//
+// The flag is read from the database rather than off the token. It IS
+// in the JWT, but a token is issued at login and lives for hours — so
+// an admin granting or revoking dispatch would not take effect until
+// the user happened to log out, and a revoked dispatcher would keep
+// handing over parcels for the rest of their shift.
+//
+// Managers and admins pass without the flag: they supervise the bench
+// rather than staff it, and a lab that cannot hand over a parcel
+// because its only dispatcher is on leave is worse than one where a
+// manager steps in. The audit trail records who actually did it.
+async function hasDispatchPermission(reqUser) {
+  if (!reqUser) return false;
+  if (['admin', 'manager'].includes(reqUser.role)) return true;
+
+  const prisma = require('../lib/prisma');
+  const fresh = await prisma.user.findUnique({
+    where: { id: reqUser.id },
+    select: { dispatchPermission: true, status: true },
+  });
+
+  return Boolean(fresh && fresh.status === 'active' && fresh.dispatchPermission);
+}
+
+async function canDispatch(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  if (!req.user.dispatchPermission) {
-    return res.status(403).json({ error: 'Dispatch permission not granted' });
+  if (!(await hasDispatchPermission(req.user))) {
+    return res.status(403).json({
+      error: 'You do not have dispatch permission. Ask an admin to grant it in User Management.',
+    });
   }
   next();
 }
@@ -205,6 +231,7 @@ module.exports = {
   requireRole,
   requirePermission,
   canDispatch,
+  hasDispatchPermission,
   requireWalletAccess,
   PERMISSIONS,
   JWT_SECRET,

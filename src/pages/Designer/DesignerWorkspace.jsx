@@ -20,7 +20,11 @@ const DesignerWorkspace = () => {
   const [toast, setToast] = useState('');
   const [showUnclaimModal, setShowUnclaimModal] = useState(false);
   const [unclaimReason, setUnclaimReason] = useState('');
+  const [channelMsg, setChannelMsg] = useState('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [sharingPlan, setSharingPlan] = useState(false);
   const fileInputRef = useRef(null);
+  const planInputRef = useRef(null);
 
   const token = sessionStorage.getItem('hesyra_token');
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
@@ -64,6 +68,59 @@ const DesignerWorkspace = () => {
       showToast('Upload error');
     } finally {
       setUploading(false);
+    }
+  };
+
+  // ─── Direct channel with the dentist (aligner cases) ──────────
+  const sendToDentist = async () => {
+    const text = channelMsg.trim();
+    if (!text) return;
+    setSendingMsg(true);
+    try {
+      const res = await fetch(`${API}/api/designer/cases/${id}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) {
+        setChannelMsg('');
+        await fetchCase();
+      } else {
+        // Surface the server's reason rather than a generic failure —
+        // "aligner cases only" is actionable, "Send failed" is not.
+        const body = await res.json().catch(() => ({}));
+        showToast(body.error || 'Message not sent');
+      }
+    } catch {
+      showToast('Message not sent');
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
+  const shareTreatmentPlan = async (files) => {
+    if (!files || files.length === 0) return;
+    setSharingPlan(true);
+    const formData = new FormData();
+    Array.from(files).forEach(f => formData.append('files', f));
+
+    try {
+      const res = await fetch(`${API}/api/designer/cases/${id}/treatment-plan`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast('Shared with the clinic ✓');
+        await fetchCase();
+      } else {
+        showToast(body.error || 'Could not share that file');
+      }
+    } catch {
+      showToast('Could not share that file');
+    } finally {
+      setSharingPlan(false);
     }
   };
 
@@ -150,7 +207,12 @@ const DesignerWorkspace = () => {
   const isBlocked   = c.status === 'blocked';
   const isRevision  = c.status === 'design_revision';
   const canSubmit   = ['cad_assigned', 'design_revision', 'designing'].includes(c.status);
-  const designFiles = (c.files || []).filter(f => f.category === 'design' || f.uploadedBy === 'cad_designer');
+  // Treatment plans are also uploaded by the designer, so they have to
+  // be excluded explicitly — otherwise a shared video shows up in the
+  // list of design files the submit button counts.
+  const planFiles   = (c.files || []).filter(f => f.category === 'treatment_plan');
+  const designFiles = (c.files || []).filter(f =>
+    f.category !== 'treatment_plan' && (f.category === 'design' || f.uploadedBy === 'cad_designer'));
   const scanFiles   = (c.files || []).filter(f => f.category === 'scan');
 
   // Fix #11: Unclaim is only possible for self-selected cases within 15-minute window
@@ -279,6 +341,103 @@ const DesignerWorkspace = () => {
                     <div className={styles.designFileSize}>{(f.size / 1024).toFixed(0)} KB</div>
                   </a>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ══════ DIRECT CHANNEL WITH THE DENTIST ══════
+              Aligner cases only. The plan is negotiated over several
+              rounds, so the designer talks to the dentist directly
+              rather than relaying through the lab. */}
+          {c.directChannel && (
+            <div className={styles.channelSection}>
+              <div className={styles.channelHeader}>
+                <span className={styles.designFileHeader}>
+                  <MessageSquare size={14} /> {c.doctorName ? `Direct line — ${c.doctorName}` : 'Direct line to the clinic'}
+                </span>
+                <span className={styles.channelNote}>The dentist sees these messages on their case.</span>
+              </div>
+
+              {/* Treatment plan — what the dentist is being asked to approve */}
+              <div className={styles.planBlock}>
+                <div className={styles.planHeader}>
+                  <span>Treatment plan{planFiles.length ? ` · ${planFiles.length}` : ''}</span>
+                  <button
+                    className={styles.planUploadBtn}
+                    onClick={() => planInputRef.current?.click()}
+                    disabled={sharingPlan}
+                  >
+                    <Upload size={13} /> {sharingPlan ? 'Sharing…' : 'Share video or photo'}
+                  </button>
+                  <input
+                    ref={planInputRef}
+                    type="file"
+                    multiple
+                    accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp"
+                    hidden
+                    onChange={e => { shareTreatmentPlan(e.target.files); e.target.value = ''; }}
+                  />
+                </div>
+
+                {planFiles.length === 0 ? (
+                  <p className={styles.planEmpty}>
+                    Nothing shared yet. A short video of the staged movement explains a plan
+                    faster than any amount of typing.
+                  </p>
+                ) : (
+                  <div className={styles.planGrid}>
+                    {planFiles.map(f => (
+                      <a
+                        key={f.id}
+                        href={`${API}${f.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.planCard}
+                      >
+                        <span className={styles.planKind}>
+                          {f.mimetype?.startsWith('video/') ? 'VIDEO' : 'IMAGE'}
+                        </span>
+                        <span className={styles.planName}>{f.name}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Conversation */}
+              <div className={styles.channelThread}>
+                {(c.messages || []).length === 0 ? (
+                  <p className={styles.planEmpty}>No messages yet.</p>
+                ) : (
+                  c.messages.map(m => (
+                    <div
+                      key={m.id}
+                      className={m.from === 'designer' ? styles.msgMine : styles.msgTheirs}
+                    >
+                      <div className={styles.msgMeta}>
+                        {m.from === 'designer' ? 'You' : (m.authorName || 'Clinic')} · {m.time}
+                      </div>
+                      <div className={styles.msgText}>{m.text}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className={styles.noteInput}>
+                <textarea
+                  placeholder="Message the dentist about this plan…"
+                  value={channelMsg}
+                  onChange={e => setChannelMsg(e.target.value)}
+                  rows={2}
+                  disabled={sendingMsg}
+                />
+                <button
+                  className={styles.noteSubmit}
+                  onClick={sendToDentist}
+                  disabled={!channelMsg.trim() || sendingMsg}
+                >
+                  <Send size={14} />
+                </button>
               </div>
             </div>
           )}

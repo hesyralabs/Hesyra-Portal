@@ -203,15 +203,22 @@ function total(lines) {
 
 /**
  * Full quote including GST. This is what case creation should call.
+ *
+ * The rate depends on what is being made — clear aligners are taxed at
+ * 8%, dental prosthetics at 5% — so it is resolved from the case type
+ * rather than read off a single constant. `gstRate` is returned with
+ * the quote so callers can show and store the rate that was actually
+ * charged instead of assuming the default.
  */
 function quoteCase(input) {
   const { netPaise, lines } = quoteNet(input);
-  const gstPaise = Math.round(netPaise * config.GST_RATE);
+  const gstRate = config.gstRateFor(input.caseType);
+  const gstPaise = Math.round(netPaise * gstRate);
   return {
     lines,
     netPaise,
     gstPaise,
-    gstRate: config.GST_RATE,
+    gstRate,
     totalPaise: netPaise + gstPaise,
   };
 }

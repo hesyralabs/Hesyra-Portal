@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const prisma = require('../lib/prisma');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, hasDispatchPermission } = require('../middleware/auth');
 const { logAudit, AUDIT_ACTIONS } = require('../lib/auditLogger');
 const paymentEngine = require('../lib/paymentEngine');
 const paymentConfig = require('../lib/config');
@@ -45,6 +45,10 @@ function blindCaseData(c, role) {
     trackingNumber:   c.trackingNumber,
     packagedAt:       c.packagedAt,
     dispatchedAt:     c.dispatchedAt,
+    // Who handed the parcel over. Names resolve at read time, so a
+    // later rename shows through on old cases too.
+    packedBy:         c.packedBy     ? { id: c.packedBy.id,     name: c.packedBy.name,     username: c.packedBy.username }     : null,
+    dispatchedBy:     c.dispatchedBy ? { id: c.dispatchedBy.id, name: c.dispatchedBy.name, username: c.dispatchedBy.username } : null,
     rejectionReason:  c.rejectionReason,
     // The detail page rendered "Submitted on ·" with a blank date
     // because neither of these was ever sent.
@@ -74,9 +78,15 @@ function blindCaseData(c, role) {
       createdAt:  f.createdAt,
     })),
     messages:         (c.messages || []).map(m => ({
+      id:   m.id,
       from: m.from,
+      // Named senders: "the lab" is a building, and on an aligner case
+      // the dentist is talking to a specific designer about a specific
+      // plan. Resolved at read time so a rename shows on old messages.
+      authorName: m.user?.name || null,
       text: m.text,
       time: new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      createdAt: m.createdAt,
     })),
     timeline:         (c.timeline || []).map(t => {
       const at = new Date(t.createdAt);
@@ -362,6 +372,18 @@ const TRANSITION_ROLES = {
 // until the case is paid for, or was knowingly dispatched on Net-30 credit.
 const DISPATCH_STATUSES = ['packaged', 'dispatched', 'shipped'];
 
+// Who a message is shown as coming from. Derived from the authenticated
+// role — never from the request body, which the client controls.
+const SENDER_BY_ROLE = {
+  clinic:       'doctor',
+  cad_designer: 'designer',
+  manager:      'manager',
+  admin:        'manager',
+  technician:   'lab',
+  ceramist:     'lab',
+  dispatch:     'lab',
+};
+
 const STATUS_LABELS = {
   draft:              'Draft',
   submitted:          'Submitted',
@@ -502,8 +524,10 @@ router.get('/', authenticate, async (req, res) => {
         doctor:           { select: { id: true, customId: true, username: true, name: true, clinic: true } },
         assignedTech:     { select: { id: true, name: true, username: true } },
         assignedDesigner: { select: { id: true, name: true, username: true } },
+        packedBy:         { select: { id: true, name: true, username: true } },
+        dispatchedBy:     { select: { id: true, name: true, username: true } },
         timeline:         { orderBy: { createdAt: 'asc' } },
-        messages:         { orderBy: { createdAt: 'asc' } },
+        messages:         { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
         files:            { orderBy: { createdAt: 'asc' } },
       },
       orderBy: [{ priorityFlag: 'desc' }, { createdAt: 'desc' }],
@@ -526,8 +550,10 @@ router.get('/:customId', authenticate, async (req, res) => {
         doctor:           { select: { id: true, customId: true, username: true, name: true, clinic: true } },
         assignedTech:     { select: { id: true, name: true, username: true } },
         assignedDesigner: { select: { id: true, name: true, username: true } },
+        packedBy:         { select: { id: true, name: true, username: true } },
+        dispatchedBy:     { select: { id: true, name: true, username: true } },
         timeline:         { orderBy: { createdAt: 'asc' } },
-        messages:         { orderBy: { createdAt: 'asc' } },
+        messages:         { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
         files:            { orderBy: { createdAt: 'asc' } },
       },
     });
@@ -842,6 +868,27 @@ router.put('/:customId/status', authenticate, async (req, res) => {
       });
     }
 
+    // ─── Dispatch is gated by the FLAG, not the role ──────────
+    // schema.prisma has said since day one: "ALWAYS check
+    // user.dispatchPermission === true. NEVER check user.role ===
+    // 'dispatch'." The canDispatch() middleware for it was written and
+    // exported, and then used by no route — so the flag did nothing and
+    // every technician could dispatch regardless of how it was set.
+    // The promised Technician→Dispatch handover ("set the old tech's
+    // dispatchPermission=false, zero API changes") silently did nothing.
+    //
+    // Checked before the payment guard: whether you may dispatch at all
+    // is a prior question to whether this case is ready, and answering
+    // them the other way round tells somebody with no dispatch rights
+    // what a clinic still owes.
+    if (DISPATCH_STATUSES.includes(newStatus)) {
+      if (!(await hasDispatchPermission(req.user))) {
+        return res.status(403).json({
+          error: 'You do not have dispatch permission. Ask an admin to grant it in User Management.',
+        });
+      }
+    }
+
     // ─── Hard Rule: no hand-over without payment ──────────────
     // Checked BEFORE the write. Covers the whole dispatch group, not just
     // the legacy 'shipped' status — packaged/dispatched are the states the
@@ -871,11 +918,15 @@ router.put('/:customId/status', authenticate, async (req, res) => {
 
     const updateData = { status: newStatus };
 
+    // Stamp who did it as well as when. Recorded on first entry only,
+    // so a later correction does not rewrite who actually packed the box.
     if (newStatus === 'packaged') {
       updateData.packagedAt = c.packagedAt || new Date();
+      if (!c.packedById) updateData.packedById = req.user.id;
     }
     if (newStatus === 'dispatched' || newStatus === 'shipped') {
       updateData.dispatchedAt = c.dispatchedAt || new Date();
+      if (!c.dispatchedById) updateData.dispatchedById = req.user.id;
     }
 
     if (rejectionReason) updateData.rejectionReason = rejectionReason;
@@ -1142,7 +1193,11 @@ router.put('/:customId', authenticate, async (req, res) => {
 // ─── POST /api/cases/:customId/messages ────────────────────────
 router.post('/:customId/messages', authenticate, async (req, res) => {
   try {
-    const { text, from } = req.body;
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: 'Message cannot be empty' });
+    }
+
     const c = await prisma.case.findUnique({ where: { customId: req.params.customId } });
     if (!c) return res.status(404).json({ error: 'Case not found' });
 
@@ -1151,17 +1206,44 @@ router.post('/:customId/messages', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // The CAD designer talks to the dentist directly on the case types
+    // that need a conversation rather than a handoff — an aligner plan
+    // is negotiated, not delivered. Only the designer actually holding
+    // the case may join it.
+    if (req.user.role === 'cad_designer') {
+      if (c.assignedDesignerId !== req.user.id) {
+        return res.status(403).json({ error: 'You are not assigned to this case' });
+      }
+      if (!paymentConfig.DESIGNER_DIRECT_CHAT_CASE_TYPES.includes(c.caseType)) {
+        return res.status(403).json({
+          error: 'Direct messaging with the clinic is available on aligner cases only. Reply through the lab instead.',
+        });
+      }
+    }
+
+    // The sender is derived from the authenticated session, never taken
+    // from the request body. `from` used to be read straight off the
+    // body with a fallback, so any signed-in account could post a
+    // message attributed to the doctor — into a thread the clinic reads
+    // as a record of what the lab told them.
+    const from = SENDER_BY_ROLE[req.user.role] || 'lab';
+
     const message = await prisma.message.create({
-      data: {
-        text,
-        from: from || (req.user.role === 'clinic' ? 'doctor' : 'lab'),
-        caseId: c.id,
-        userId: req.user.id,
-      },
+      data: { text: String(text).trim(), from, caseId: c.id, userId: req.user.id },
+      include: { user: { select: { name: true } } },
     });
 
     const io = req.app.get('io');
-    if (io) io.emit('case:message', { customId: req.params.customId, message: { from: message.from, text: message.text, time: new Date(message.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) } });
+    if (io) io.emit('case:message', {
+      customId: req.params.customId,
+      message: {
+        id: message.id,
+        from: message.from,
+        authorName: message.user?.name || null,
+        text: message.text,
+        time: new Date(message.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      },
+    });
 
     res.status(201).json({ success: true });
   } catch (err) {

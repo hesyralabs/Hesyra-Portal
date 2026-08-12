@@ -482,8 +482,14 @@ async function generateInvoice(caseData) {
   // catalogue price at case creation, and it is exactly what the clinic
   // was charged. Recover the net and tax components from it so the
   // invoice total always reconciles to the amount collected.
+  //
+  // The rate comes from the case type — aligners are 8%, prosthetics 5%.
+  // Using the default constant here would recover the wrong split on
+  // every aligner invoice while still totalling correctly, which is the
+  // kind of error nobody notices until a return is filed.
+  const gstRate = config.gstRateFor(caseData.caseType);
   const grossPaise = caseData.totalAmountPaise || 0;
-  const taxAmountPaise = Math.round(grossPaise * config.GST_RATE / (1 + config.GST_RATE));
+  const taxAmountPaise = Math.round(grossPaise * gstRate / (1 + gstRate));
   const netPaise = grossPaise - taxAmountPaise;
 
   // Resolve the real clinic name from the doctor record — the case's own
@@ -497,7 +503,7 @@ async function generateInvoice(caseData) {
 
   const tax = splitTax(taxAmountPaise, doctor?.clinicState);
 
-  await prisma.invoice.create({
+  const created = await prisma.invoice.create({
     data: {
       customId: invId,
       // Taxable value, in rupees. Add taxAmountPaise for the gross.
@@ -507,7 +513,7 @@ async function generateInvoice(caseData) {
       clinic: doctor?.clinic || caseData.clinic,
       userId: caseData.doctorId || null,
       invoiceType: 'per_case',
-      gstRate: config.GST_RATE,
+      gstRate,
       hsnCode: config.HSN_CODE,
       gstin: config.HESYRA_GSTIN,
       taxAmountPaise,
@@ -515,6 +521,34 @@ async function generateInvoice(caseData) {
       cases: { connect: { id: caseData.id } },
     },
   });
+
+  // Email it. Deliberately not awaited into the caller's success:
+  // sendInvoice() never throws, and a bounced email must not undo an
+  // invoice that legitimately exists and is already on the dashboard.
+  deliverInvoice(created.customId);
+
+  return created;
+}
+
+/**
+ * Fire-and-forget invoice delivery.
+ *
+ * Isolated here so both invoice paths use it and neither can be made to
+ * fail by a mail problem. Failures are logged, and the invoice remains
+ * downloadable in-app regardless — which is why not being able to send
+ * is an inconvenience rather than a lost document.
+ */
+function deliverInvoice(invoiceCustomId) {
+  // Required lazily: invoiceMailer pulls in the PDF renderer, and this
+  // module is loaded by routes that never issue an invoice.
+  const invoiceMailer = require('./invoiceMailer');
+
+  invoiceMailer.sendInvoice(invoiceCustomId)
+    .then(r => {
+      if (r.sent) console.log(`  [Invoice] ${invoiceCustomId} emailed to ${r.to}`);
+      else console.warn(`  [Invoice] ${invoiceCustomId} not emailed — ${r.reason}`);
+    })
+    .catch(err => console.warn(`  [Invoice] ${invoiceCustomId} delivery error:`, err.message));
 }
 
 /**
@@ -569,7 +603,23 @@ async function generateMonthlyInvoice(userId, billingPeriod) {
   // This previously read `totalINR * GST_RATE * 100`, which applies the
   // rate a second time to a gross amount and overstates the tax on
   // every monthly invoice by about 5% of itself.
-  const taxAmount = Math.round(totalPaise * config.GST_RATE / (1 + config.GST_RATE));
+  //
+  // A month's cases can carry different rates — an aligner at 8% beside
+  // crowns at 5% — so the tax is recovered case by case and summed. One
+  // rate applied to the bundle would be wrong for every clinic that
+  // ordered both in the same month.
+  const taxAmount = creditCases.reduce((sum, c) => {
+    const rate = config.gstRateFor(c.caseType);
+    return sum + Math.round((c.totalAmountPaise || 0) * rate / (1 + rate));
+  }, 0);
+
+  // A single gstRate only describes the invoice when every case on it
+  // shares one. Where they differ it is left null rather than stating a
+  // rate that applies to only part of the document — the per-line rates
+  // on the rendered invoice carry the detail.
+  const rates = [...new Set(creditCases.map(c => config.gstRateFor(c.caseType)))];
+  const uniformRate = rates.length === 1 ? rates[0] : null;
+
   const now = new Date();
   const dueDate = new Date(now.getTime() + config.CREDIT_PAYMENT_DAYS * 24 * 60 * 60 * 1000);
 
@@ -601,7 +651,7 @@ async function generateMonthlyInvoice(userId, billingPeriod) {
         invoiceType: 'monthly',
         billingPeriod,
         dueDate,
-        gstRate: config.GST_RATE,
+        gstRate: uniformRate,
         hsnCode: config.HSN_CODE,
         gstin: config.HESYRA_GSTIN,
         taxAmountPaise: taxAmount,
@@ -621,6 +671,12 @@ async function generateMonthlyInvoice(userId, billingPeriod) {
   });
 
   console.log(`  [CreditEngine] ✅ Monthly invoice ${invId} generated for ${doctor.name}: ₹${totalINR} (${creditCases.length} cases)`);
+
+  // A month-end invoice with a due date is the one that most needs to
+  // arrive by email — nobody checks a dashboard for a bill they do not
+  // know exists.
+  deliverInvoice(invId);
+
   return { invoice, caseCount: creditCases.length, totalPaise, paymentLink };
 }
 
@@ -866,6 +922,7 @@ module.exports = {
   handlePaymentConfirmed,
   handleDepositConfirmed,
   creditWalletReload,
+  deliverInvoice,
   applyStrike,
   collectDeposit,
   generateInvoice,

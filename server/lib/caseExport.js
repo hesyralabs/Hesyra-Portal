@@ -120,7 +120,9 @@ const COLUMNS = [
   { key: 'approvedAt',     header: 'Design approved',width: 18, type: 'datetime' },
   { key: 'approvedBy',     header: 'Approved by',    width: 26, type: 'text' },
   { key: 'readyAt',        header: 'Ready',          width: 18, type: 'datetime' },
+  { key: 'packedBy',       header: 'Packed by',      width: 22, type: 'text' },
   { key: 'dispatchedAt',   header: 'Dispatched',     width: 18, type: 'datetime' },
+  { key: 'dispatchedBy',   header: 'Dispatched by',  width: 22, type: 'text' },
   { key: 'courier',        header: 'Courier',        width: 16, type: 'text' },
   { key: 'consignment',    header: 'Consignment',    width: 20, type: 'text' },
   { key: 'netAmount',      header: 'Net (₹)',        width: 13, type: 'money' },
@@ -151,13 +153,29 @@ function who(user, legacyLabel) {
   return id ? `${user.name} (${id})` : user.name || '';
 }
 
+/**
+ * Every GST rate the catalogue can charge, as a label: "5%" when there
+ * is one, "5% / 8%" when case types differ.
+ */
+function gstRateLabel() {
+  const rates = new Set([
+    config.GST_RATE,
+    ...Object.values(config.GST_RATE_BY_CASE_TYPE || {}),
+  ]);
+  return [...rates].sort((a, b) => a - b).map(r => `${Math.round(r * 100)}%`).join(' / ');
+}
+
 function shapeRow(c) {
   let teeth = [];
   try { teeth = JSON.parse(c.toothNumbers || '[]'); } catch { teeth = []; }
 
-  // Back-computed from what was charged, not re-priced from the list.
+  // Back-computed from what was charged, not re-priced from the list,
+  // and at the rate that applies to THIS case type — aligners are 8%,
+  // prosthetics 5%. A single rate across the export splits every
+  // aligner row wrongly while still totalling correctly.
   const total = c.totalAmountPaise || 0;
-  const net = Math.round(total / (1 + config.GST_RATE));
+  const rate = config.gstRateFor(c.caseType);
+  const net = Math.round(total / (1 + rate));
   const gst = total - net;
 
   return {
@@ -187,7 +205,9 @@ function shapeRow(c) {
                         ? who(c.doctor)
                         : '',
     readyAt:        c.readyForDispatchAt,
+    packedBy:       who(c.packedBy),
     dispatchedAt:   c.dispatchedAt,
+    dispatchedBy:   who(c.dispatchedBy),
     courier:        c.trackingCourier || '',
     consignment:    c.trackingNumber || '',
     netAmount:      paise(net),
@@ -217,6 +237,8 @@ async function fetchCases({ from, to, status, clinicId }) {
       assignedTech:     { select: { name: true, username: true, customId: true } },
       assignedDesigner: { select: { name: true, username: true, customId: true } },
       assignedCeramist: { select: { name: true, username: true, customId: true } },
+      packedBy:         { select: { name: true, username: true, customId: true } },
+      dispatchedBy:     { select: { name: true, username: true, customId: true } },
     },
   });
 
@@ -307,7 +329,10 @@ async function buildWorkbook({ rows, summary, range, generatedBy }) {
   put('Complimentary (Scan Day)', summary.complimentary);
   sum.addRow([]);
   put('Net (₹)', summary.netTotal, true);
-  put(`GST @ ${Math.round(config.GST_RATE * 100)}% (₹)`, summary.gstTotal);
+  // Rates vary by case type, so the heading names them rather than
+  // asserting one — a statement covering aligners and crowns carries
+  // both 8% and 5% and labelling it "GST @ 5%" would be false.
+  put(`GST @ ${gstRateLabel()} (₹)`, summary.gstTotal);
   put('Total (₹)', summary.grandTotal, true);
   put('Collected (₹)', summary.paidTotal);
   put('Outstanding (₹)', summary.unpaidTotal);

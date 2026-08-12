@@ -235,8 +235,14 @@ const NewCase = () => {
 
     if (!lines.length) return null;
     const net = lines.reduce((s, l) => s + l.amount, 0);
-    const gst = Math.round(net * (rules?.gstRate ?? GST_RATE));
-    return { lines, net, gst, total: net + gst };
+    // The rate depends on what is being made — aligners are taxed at 8%,
+    // prosthetics at 5%. Both the rate and the table come from the
+    // server so this estimate cannot drift from the invoice.
+    const gstRate = rules?.gstRateByCaseType?.[formData.caseType]
+      ?? rules?.gstRate
+      ?? GST_RATE;
+    const gst = Math.round(net * gstRate);
+    return { lines, net, gst, gstRate, total: net + gst };
   }, [rules, catalogMaterials, formData]);
 
   useEffect(() => {
@@ -1234,7 +1240,7 @@ const NewCase = () => {
                         </div>
                       ))}
                       <div className={styles.summaryRow}>
-                        <dt>GST @ {Math.round((rules?.gstRate ?? GST_RATE) * 100)}%</dt>
+                        <dt>GST @ {Math.round(estimate.gstRate * 100)}%</dt>
                         <dd className={styles.num}>{rupees(estimate.gst)}</dd>
                       </div>
                     </dl>

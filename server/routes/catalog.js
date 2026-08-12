@@ -64,8 +64,13 @@ router.get('/materials', async (req, res) => {
 // cases, and the categories that are quote-on-request.
 router.get('/pricing-rules', (req, res) => {
   const pricing = require('../lib/pricing');
+  const config = require('../lib/config');
   res.json({
-    gstRate: require('../lib/config').GST_RATE,
+    // gstRate is the default. gstRateByCaseType overrides it per type —
+    // the New Case estimate has to apply the same rule the server does,
+    // or the quoted total stops matching the invoice.
+    gstRate: config.GST_RATE,
+    gstRateByCaseType: config.GST_RATE_BY_CASE_TYPE,
     alignerTiers: Object.entries(pricing.ALIGNER_TIERS).map(([id, t]) => ({
       id,
       label: t.label,

@@ -96,6 +96,8 @@ model User {
   techCases          Case[]              @relation("TechCases")
   designerCases      Case[]              @relation("DesignerCases")
   ceramistCases      Case[]              @relation("CeramistCases")
+  packedCases        Case[]              @relation("PackedCases")
+  dispatchedCases    Case[]              @relation("DispatchedCases")
   messages           Message[]
   wallet             Wallet?
   strikes            Strike[]
@@ -166,6 +168,16 @@ model Case {
   dispatchPhotoUrl    String?   // Mandatory before status → 'dispatched'
   packagedAt          DateTime?
   dispatchedAt        DateTime?
+
+  // Who physically packed and handed the case over. The audit log
+  // records the actor on every status change, but a parcel query
+  // ("who sent this and what did they put in the box?") should not
+  // require joining the audit trail — and case exports had no way to
+  // answer it at all.
+  packedById          String?
+  packedBy            User?     @relation("PackedCases", fields: [packedById], references: [id])
+  dispatchedById      String?
+  dispatchedBy        User?     @relation("DispatchedCases", fields: [dispatchedById], references: [id])
 
   trackingCourier String?
   trackingNumber  String?
@@ -382,7 +394,10 @@ model CaseFile {
   path       String
   size       Int
   mimetype   String
-  category   String   // 'scan' | 'design' | 'dispatch_photo'
+  // 'treatment_plan' is the one category the clinic is meant to open:
+  // scans and design files are working files, a treatment plan is the
+  // designer showing the dentist what they intend to do.
+  category   String   // 'scan' | 'design' | 'dispatch_photo' | 'treatment_plan'
   uploadedBy String   // 'clinic' | 'lab' | 'cad_designer' | 'dispatch'
   createdAt  DateTime @default(now())
 
@@ -433,6 +448,11 @@ model Invoice {
   //
   // placeOfSupplyAssumed records that the clinic had no state on file
   // and the lab's own state was used as the fallback.
+  // Delivery. Recorded so a "did you send my invoice?" question has an
+  // answer, and so a resend is a deliberate act rather than a guess.
+  emailedAt DateTime?
+  emailedTo String?
+
   placeOfSupply        String?
   placeOfSupplyAssumed Boolean @default(false)
   interState           Boolean @default(false)
