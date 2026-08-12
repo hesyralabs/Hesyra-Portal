@@ -424,6 +424,22 @@ model Invoice {
   gstin          String?
   taxAmountPaise Int?
 
+  // ─── Place of supply ─────────────────────────────────────────
+  // A sale inside the lab's own state is taxed as CGST + SGST; one
+  // across a state line is a single IGST levy at the full rate. Same
+  // total either way, but it decides which government is owed, so it
+  // cannot be reconstructed later from the total alone — and an
+  // invoice that gets it wrong has to be credited and reissued.
+  //
+  // placeOfSupplyAssumed records that the clinic had no state on file
+  // and the lab's own state was used as the fallback.
+  placeOfSupply        String?
+  placeOfSupplyAssumed Boolean @default(false)
+  interState           Boolean @default(false)
+  cgstPaise            Int?
+  sgstPaise            Int?
+  igstPaise            Int?
+
   // ─── Monthly Credit Invoice fields ───────────────────────────
   // invoiceType: 'per_case' (legacy, generated at dispatch for prepaid)
   //              'monthly'  (new, consolidated at month-end for net_30 clinics)
@@ -490,6 +506,26 @@ model PaymentRecord {
   walletDeductPaise     Int      @default(0)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+// Every Razorpay webhook we have accepted, keyed on the delivery id
+// Razorpay puts in the x-razorpay-event-id header.
+//
+// Razorpay retries a webhook until it gets a 2xx, so the same event
+// arrives more than once as a matter of course — after a timeout, a
+// deploy, or a slow database. Without this table a redelivered
+// order.paid credits the wallet twice, which is real money. Inserting
+// the id first and letting the unique constraint reject the duplicate
+// makes the check atomic; a status check would race against itself.
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  eventId     String    @unique   // x-razorpay-event-id
+  eventType   String              // payment.captured | order.paid | …
+  status      String    @default("processing") // processing | processed | failed | ignored
+  error       String?
+  referenceId String?             // case customId / invoice customId, for tracing
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
 }
 
 model Strike {

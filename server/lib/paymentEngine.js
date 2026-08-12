@@ -237,6 +237,77 @@ async function generatePaymentLink(caseData, doctor, amountPaise, walletDeductPa
 }
 
 /**
+ * Credit a wallet reload. Idempotent on the Razorpay payment id.
+ *
+ * The same reload reaches us twice by design — once from the browser
+ * when Standard Checkout returns, and once from the order.paid webhook,
+ * and the webhook itself is retried until it gets a 2xx. Crediting on
+ * every arrival hands out free money, so the payment id is the key: if
+ * a LOAD already carries it, this is a replay and nothing moves.
+ */
+async function creditWalletReload({ userId, amountPaise, razorpayPaymentId, description }) {
+  if (!userId || !amountPaise || amountPaise <= 0) {
+    return { credited: false, reason: 'Nothing to credit' };
+  }
+
+  const bonusEligible = config.WALLET_BONUS_ENABLED && amountPaise >= config.WALLET_BONUS_THRESHOLD_PAISE;
+  const bonusPaise = bonusEligible ? config.WALLET_BONUS_AMOUNT_PAISE : 0;
+
+  let wallet = await prisma.wallet.findUnique({ where: { userId } });
+  if (!wallet) wallet = await prisma.wallet.create({ data: { userId } });
+
+  const result = await prisma.$transaction(async (tx) => {
+    // The duplicate check lives inside the transaction so a concurrent
+    // delivery cannot read "not credited" and then both write.
+    if (razorpayPaymentId) {
+      const seen = await tx.walletTransaction.findFirst({
+        where: { razorpayPaymentId, type: config.TX_TYPES.LOAD },
+        select: { id: true },
+      });
+      if (seen) return { alreadyCredited: true, credited: false };
+    }
+
+    await tx.wallet.update({
+      where: { id: wallet.id },
+      data: {
+        balancePaise: { increment: amountPaise + bonusPaise },
+        totalLoadedPaise: { increment: amountPaise },
+      },
+    });
+
+    await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: config.TX_TYPES.LOAD,
+        amountPaise,
+        direction: 'CREDIT',
+        description: description || `Wallet reloaded — ₹${config.paiseToINR(amountPaise)}`,
+        razorpayPaymentId: razorpayPaymentId || null,
+      },
+    });
+
+    if (bonusPaise) {
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: config.TX_TYPES.BONUS_CREDIT,
+          amountPaise: bonusPaise,
+          direction: 'CREDIT',
+          description: 'Bonus credit for premium reload',
+        },
+      });
+    }
+
+    return { credited: true, alreadyCredited: false };
+  });
+
+  if (result.alreadyCredited) return result;
+
+  const updated = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+  return { ...result, loaded: amountPaise, bonus: bonusPaise, newBalance: updated.balancePaise };
+}
+
+/**
  * Handle payment confirmation (from webhook or simulation).
  * This fires for PAY_ON_GO and PARTIAL_WALLET payments.
  */
@@ -250,6 +321,13 @@ async function handlePaymentConfirmed(caseCustomId, razorpayPaymentId) {
   });
 
   if (!caseData) throw new Error('Case not found');
+
+  // A retried webhook must not re-run any of this. Confirming twice
+  // would debit a wallet twice and issue a second invoice against a
+  // case that was only paid for once.
+  if (caseData.paymentConfirmedAt) {
+    return { success: true, alreadyConfirmed: true, status: caseData.status };
+  }
 
   const pendingRecord = caseData.paymentRecords.find(r => r.status === 'pending' && r.type !== 'DEPOSIT');
 
@@ -411,8 +489,13 @@ async function generateInvoice(caseData) {
   // Resolve the real clinic name from the doctor record — the case's own
   // clinic field is client-supplied and can hold a placeholder.
   const doctor = caseData.doctorId
-    ? await prisma.user.findUnique({ where: { id: caseData.doctorId }, select: { clinic: true } })
+    ? await prisma.user.findUnique({
+        where: { id: caseData.doctorId },
+        select: { clinic: true, clinicState: true },
+      })
     : null;
+
+  const tax = splitTax(taxAmountPaise, doctor?.clinicState);
 
   await prisma.invoice.create({
     data: {
@@ -428,9 +511,32 @@ async function generateInvoice(caseData) {
       hsnCode: config.HSN_CODE,
       gstin: config.HESYRA_GSTIN,
       taxAmountPaise,
+      ...tax,
       cases: { connect: { id: caseData.id } },
     },
   });
+}
+
+/**
+ * Split a tax amount into CGST/SGST or IGST for a clinic in a given
+ * state, in the shape the Invoice row stores.
+ *
+ * Halving is done on the paise rather than deriving each half from the
+ * rate, so the two always re-add to the total instead of leaving a
+ * one-paise hole on odd amounts.
+ */
+function splitTax(taxAmountPaise, clinicState) {
+  const treatment = razorpay.resolveTaxTreatment(clinicState);
+  const half = Math.floor(taxAmountPaise / 2);
+
+  return {
+    placeOfSupply: treatment.placeOfSupply,
+    placeOfSupplyAssumed: treatment.assumed,
+    interState: treatment.interState,
+    cgstPaise: treatment.interState ? 0 : half,
+    sgstPaise: treatment.interState ? 0 : taxAmountPaise - half,
+    igstPaise: treatment.interState ? taxAmountPaise : 0,
+  };
 }
 
 /**
@@ -447,7 +553,7 @@ async function generateMonthlyInvoice(userId, billingPeriod) {
       creditInvoiceId: null,             // Not yet invoiced
       status: { notIn: ['cancelled'] },  // Ignore cancelled cases
     },
-    include: { doctor: { select: { name: true, clinic: true, email: true } } },
+    include: { doctor: { select: { name: true, clinic: true, email: true, clinicState: true } } },
   });
 
   if (creditCases.length === 0) return null;
@@ -455,7 +561,15 @@ async function generateMonthlyInvoice(userId, billingPeriod) {
   const doctor = creditCases[0].doctor;
   const totalPaise = creditCases.reduce((sum, c) => sum + (c.totalAmountPaise || 0), 0);
   const totalINR = totalPaise / 100;
-  const taxAmount = Math.round(totalINR * config.GST_RATE * 100);
+
+  // totalAmountPaise is GST-INCLUSIVE — the tax was added on top at
+  // case creation and is already inside this figure. Recover it the
+  // same way per-case invoices do.
+  //
+  // This previously read `totalINR * GST_RATE * 100`, which applies the
+  // rate a second time to a gross amount and overstates the tax on
+  // every monthly invoice by about 5% of itself.
+  const taxAmount = Math.round(totalPaise * config.GST_RATE / (1 + config.GST_RATE));
   const now = new Date();
   const dueDate = new Date(now.getTime() + config.CREDIT_PAYMENT_DAYS * 24 * 60 * 60 * 1000);
 
@@ -491,6 +605,7 @@ async function generateMonthlyInvoice(userId, billingPeriod) {
         hsnCode: config.HSN_CODE,
         gstin: config.HESYRA_GSTIN,
         taxAmountPaise: taxAmount,
+        ...splitTax(taxAmount, doctor.clinicState),
         userId,
         cases: { connect: creditCases.map(c => ({ id: c.id })) },
       },
@@ -750,6 +865,7 @@ module.exports = {
   processReadyForDispatch,
   handlePaymentConfirmed,
   handleDepositConfirmed,
+  creditWalletReload,
   applyStrike,
   collectDeposit,
   generateInvoice,

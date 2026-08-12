@@ -89,7 +89,9 @@ trip "Too many login attempts". Restarting the server clears it.
 ### Scripts
 
 ```bash
-cd server && npm test          # pricing suite — 49 assertions, run after touching pricing
+cd server && npm test          # pricing (49) + payment (43) — run after touching either
+cd server && npm run test:pricing   # just the pricing suite
+cd server && npm run test:payment   # just the payment / signature suite
 node server/seed.js            # full demo seed (accounts + sample cases)
 node server/seedCatalog.js     # loads the real price list into MaterialSKU
 node server/wipe_cases.js      # clears all case data, keeps accounts
@@ -211,9 +213,22 @@ Wallet mode auto-debits at `ready_for_dispatch`; partial balance is drawn down
 and the remainder billed by link; the wallet has a floor and cannot go
 negative.
 
-Live Razorpay is **not implemented** (`lib/razorpay.js` throws on the live
-path). `RAZORPAY_MODE=test` uses `/api/payment/simulate/:caseId`, role-gated
-to the owning clinic or admin/manager.
+Live Razorpay **is implemented** (third session) but has never run against a
+real Razorpay account — see §8. `RAZORPAY_MODE=test` still uses
+`/api/payment/simulate/:caseId`, role-gated to the owning clinic or
+admin/manager, and the `/simulate*` endpoints refuse to run in live mode.
+
+Three things hold the live path together and are easy to break by accident:
+
+- **`req.rawBody`.** The webhook signature is an HMAC over the exact bytes
+  Razorpay sent. `express.json({ verify })` in `server.js` captures them.
+  Verifying against `JSON.stringify(req.body)` does not round-trip and
+  rejects every genuine webhook.
+- **`WebhookEvent`.** Razorpay retries until it gets a 2xx, so every event
+  arrives more than once. The row is claimed before any money moves.
+- **`creditWalletReload()`** is idempotent on the Razorpay payment id, so the
+  browser callback and the `order.paid` webhook can both run and only one
+  credits.
 
 ### Audit trail
 `AuditLog` records the ordinary case lifecycle, not just admin overrides:
@@ -447,13 +462,101 @@ negative, exactly one paid invoice attributed to the clinic.
 
 ---
 
-## 7. Open issues / next steps
+## 7. Session log — third session
+
+### Live Razorpay implemented
+`lib/razorpay.js` no longer throws on the live path: real `paymentLink.create`
+and `orders.create`, payment and link lookup, and a config assertion that
+names missing environment variables instead of failing as a 401 three calls
+later. `razorpay@2.9.8` added to `server/package.json`.
+
+Four defects in the live path were found on the way, none of which the stub
+could expose:
+
+- **The webhook signature could never have verified.** `express.json()` runs
+  before the payment router, so the `express.raw()` mounted on the webhook
+  route was a no-op — body-parser had already consumed the stream and set
+  `req._body`. The HMAC was computed over `JSON.stringify(parsedObject)`,
+  which is not the bytes Razorpay signed. Every genuine webhook would have
+  been rejected as a forgery. Fixed by capturing `req.rawBody` in
+  `express.json({ verify })`.
+- **Nothing was idempotent.** Razorpay retries a webhook until it gets a 2xx.
+  A redelivered `order.paid` credited the wallet again, and a redelivered
+  `payment.captured` re-confirmed a case and issued a second invoice. Added
+  the `WebhookEvent` claim table, an early return in `handlePaymentConfirmed`
+  when `paymentConfirmedAt` is set, and dedupe on the Razorpay payment id in
+  the new shared `creditWalletReload()`.
+- **Nothing verified the checkout callback.** Wallet reload used Standard
+  Checkout and never checked `razorpay_signature`, so what the browser posted
+  back was an unverified claim. Added `verifyCheckoutSignature()` and
+  `POST /api/wallet/reload/verify`, which reads the amount from Razorpay
+  rather than from the request body.
+- **Wallet reload was broken in the client regardless.** `PaymentContext`
+  read `order.id` and `order.amount`; the API returns `orderId` and
+  `amountPaise`. Both were `undefined`, so the checkout never opened. The key
+  id was also hardcoded to `'rzp_test_stub'` behind a comment conceding it was
+  a placeholder — it now comes from the server.
+
+Signature comparison is constant-time. The `/simulate*` endpoints were already
+refused in live mode and still are.
+
+### Invoices
+`numberToWords()` multiplied paise by 100 and returned `"(approx.)"`. Amount in
+words is a legal requirement on an Indian tax invoice, so it is now exact and
+groups in lakhs and crores.
+
+**Monthly credit invoices overstated GST.** `taxAmount` was
+`totalINR * GST_RATE * 100` applied to `totalAmountPaise`, which is already
+GST-inclusive — charging the rate a second time on a gross figure. Now
+back-computed the way per-case invoices already did it.
+
+**CGST/SGST vs IGST** was hardcoded to an even intra-state split. A sale to a
+clinic outside Maharashtra is a single IGST levy, and getting it wrong means
+the wrong government is paid. `resolveTaxTreatment()` decides from the clinic's
+`clinicState` against the state code in the lab's own GSTIN; the split and the
+place of supply are stored on the `Invoice` row, with `placeOfSupplyAssumed`
+recording when the clinic had no state on file.
+
+### Launch config gate
+The server refuses to start in `RAZORPAY_MODE=live` while Razorpay keys, the
+webhook secret, `JWT_SECRET` or a valid `HESYRA_GSTIN` are missing, listing
+every problem by name. In test mode the same check prints a warning and
+carries on. `server/.env.example` documents the new variables, including that
+the webhook secret is **not** the API key secret.
+
+### Tests
+`server/test/payment.test.js` — 43 assertions on signature verification, the
+tax split, amount in words and the config gate. `npm test` now runs both
+suites (92 assertions). It deliberately does **not** cover `createPaymentLink`
+or `createOrder`, which need an account.
+
+---
+
+## 8. Open issues / next steps
 
 ### Launch blockers
-1. **Live Razorpay is unimplemented** — payments cannot work in production.
-   The single biggest blocker.
-2. **`HESYRA_GSTIN` in `server/lib/config.js` is the placeholder**
-   `27XXXXX0000X1Z5`. Must be set before any invoice goes out.
+1. **Live Razorpay has never touched a real Razorpay account.** The code is
+   written and the trust boundary is tested, but nothing here has created a
+   real payment link, opened a real checkout, or received a real webhook.
+   Before launch: obtain live keys, register the webhook at
+   `https://<domain>/api/payment/webhook` for `payment.captured`,
+   `payment_link.paid` and `order.paid`, then take one real ₹1 payment end to
+   end and confirm it lands once.
+2. **`HESYRA_GSTIN` is still the placeholder** `27XXXXX0000X1Z5`. Now enforced
+   — the server will not start in live mode without a valid one — but the real
+   number still has to be supplied. Note its first two digits pick the state
+   for every CGST/SGST vs IGST decision.
+3. **There is no invoice document.** `generateGSTInvoiceData()` is exported and
+   never called: invoices exist only as database rows, and `routes/invoices.js`
+   is list/edit/delete. Nothing renders a PDF or printable tax invoice for a
+   clinic. Found in the third session, not fixed.
+4. **`Invoice.amount` means two different things.** Per-case rows store the
+   taxable value; monthly rows store the GST-inclusive gross, and
+   `handleCreditPayment()` depends on the latter. Any revenue total summing
+   the column across both types is wrong. Left alone because fixing it touches
+   the outstanding-balance arithmetic and the UI, and wants a decision.
+5. `npm audit` reports 19 vulnerabilities (9 high) in the server tree.
+   Pre-existing, not reviewed.
 
 ### Product decisions to make
 - **A crown credit zeroes whatever crown it is applied to, regardless of
@@ -485,7 +588,7 @@ negative, exactly one paid invoice attributed to the clinic.
 
 ---
 
-## 8. Working style that was asked for
+## 9. Working style that was asked for
 
 - **Verify in the browser, not just the build.** A build passing means
   nothing — an un-imported icon is a runtime error that builds clean and

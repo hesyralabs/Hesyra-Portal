@@ -197,6 +197,12 @@ export const walletAPI = {
   reload: (amountPaise) =>
     apiFetch('/wallet/reload', { method: 'POST', body: JSON.stringify({ amountPaise }) }),
 
+  // Hand Razorpay's checkout response back for signature verification.
+  // The wallet is credited by the order.paid webhook regardless; this
+  // just lets the clinic see the new balance without waiting for it.
+  verifyReload: (payload) =>
+    apiFetch('/wallet/reload/verify', { method: 'POST', body: JSON.stringify(payload) }),
+
   simulateReload: (amountPaise) =>
     apiFetch('/wallet/simulate-reload', { method: 'POST', body: JSON.stringify({ amountPaise }) }),
 

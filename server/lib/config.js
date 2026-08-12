@@ -67,7 +67,28 @@ module.exports = {
   // (Hesyra Introductory Price List, July 2026.)
   GST_RATE:       0.05,        // 5%
   HSN_CODE:       '9021',      // Dental prosthetics
-  HESYRA_GSTIN:   '27XXXXX0000X1Z5', // Placeholder — set in production
+
+  // The registration the invoices are issued under. Its first two
+  // digits are the state code, and resolveTaxTreatment() reads them to
+  // decide CGST+SGST vs IGST — so this is not just a string printed on
+  // a PDF, it drives which tax is charged.
+  //
+  // The placeholder below is deliberately invalid. GSTIN_PLACEHOLDER
+  // and isGstinConfigured() exist so the app can refuse to issue a tax
+  // invoice against it rather than emit an unusable document.
+  HESYRA_GSTIN:   process.env.HESYRA_GSTIN || '27XXXXX0000X1Z5',
+  GSTIN_PLACEHOLDER: '27XXXXX0000X1Z5',
+  isGstinConfigured() {
+    const g = String(this.HESYRA_GSTIN || '').trim();
+    // A real GSTIN is 15 characters: 2 state digits, a 10-character
+    // PAN, an entity digit, 'Z', and a checksum character.
+    return Boolean(g) && g !== this.GSTIN_PLACEHOLDER && /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/.test(g);
+  },
+
+  // Printed on every invoice. Kept in config rather than inline in the
+  // invoice builder so the registered address has exactly one home.
+  HESYRA_LEGAL_NAME: process.env.HESYRA_LEGAL_NAME || 'Hesyra Labs',
+  HESYRA_ADDRESS:    process.env.HESYRA_ADDRESS    || 'Nagpur, Maharashtra, India',
 
   // ─── Pricing (paise) — mirrored from cases.js ─────────────
   CASE_PRICING_PAISE: {

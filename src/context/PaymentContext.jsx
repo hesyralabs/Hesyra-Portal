@@ -106,18 +106,23 @@ export const PaymentProvider = ({ children }) => {
   // ─── Wallet Reload (Secure Native Checkout) ──────────────────
   const reloadWallet = useCallback(async (amountPaise) => {
     try {
-      // 1. Create Order backend
-      const { order, bonusEligible, bonusAmount } = await walletAPI.reload(amountPaise);
-      if (!order) throw new Error('Order creation failed');
+      // 1. Create the order server-side. The key id comes back with it —
+      //    it is the publishable half of the pair and the only one that
+      //    may ever reach the browser.
+      const { order, keyId } = await walletAPI.reload(amountPaise);
+      if (!order?.orderId) throw new Error('Order creation failed');
 
-      // 2. Open Native UI
+      // 2. Open Native UI. Razorpay's own field names differ from ours:
+      //    it wants `amount` and `order_id`, we return `amountPaise` and
+      //    `orderId`. Reading order.id/order.amount here yielded
+      //    undefined and the checkout never opened.
       const result = await openRazorpayCheckout({
-        key: 'rzp_test_stub', // Replaced dynamically or from window.env ideally, but Razorpay checkout allows test keys safely client side. We'll use a placeholder or let the backend issue short-lived keys in V2.
-        amount: order.amount,
+        key: keyId,
+        amount: order.amountPaise,
         currency: order.currency,
         name: 'Hesyra Labs',
         description: 'Wallet Reload',
-        order_id: order.id,
+        order_id: order.orderId,
         prefill: {
           name: user?.name,
           email: user?.email,
@@ -126,11 +131,33 @@ export const PaymentProvider = ({ children }) => {
       });
 
       if (result.success) {
-        // Technically Webhooks handle DB update, but we optimistically refresh API
-        addToast(`Payment successful! Processing wallet reload...`, 'success');
-        
-        // Wait 2s for webhook to clear DB
-        setTimeout(() => refreshWallet(), 2000);
+        // The order.paid webhook is what actually credits the wallet.
+        // Verifying here as well means the balance updates as soon as
+        // the dentist closes the checkout instead of after an arbitrary
+        // wait — and because both paths credit through the same
+        // idempotent function, whichever lands second does nothing.
+        //
+        // This used to be a bare 2-second setTimeout before a refresh,
+        // which showed a stale balance whenever the webhook was slower
+        // than that and never corrected itself.
+        try {
+          const verified = await walletAPI.verifyReload({
+            razorpay_order_id: result.response?.razorpay_order_id || order.orderId,
+            razorpay_payment_id: result.response?.razorpay_payment_id,
+            razorpay_signature: result.response?.razorpay_signature,
+            amountPaise,
+          });
+          addToast(
+            `Wallet reloaded — ₹${((verified.newBalance ?? 0) / 100).toLocaleString('en-IN')} available`,
+            'success'
+          );
+        } catch {
+          // Verification failing does not mean the payment failed — the
+          // webhook is still authoritative. Say so rather than implying
+          // the money is lost.
+          addToast('Payment received. Updating your balance…', 'success');
+        }
+        await refreshWallet();
       }
       return result;
     } catch (err) {

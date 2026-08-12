@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const express = require('express');
+const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth');
 const paymentEngine = require('../lib/paymentEngine');
@@ -105,19 +106,51 @@ router.post('/create-link/:caseCustomId', authenticate, async (req, res) => {
 });
 
 // ─── POST /api/payment/webhook ────────────────────────────────
-// Razorpay webhook handler
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+// Razorpay webhook handler.
+//
+// Two things here are load-bearing and easy to undo by accident:
+//
+//   1. The signature is verified against req.rawBody — the exact bytes
+//      Razorpay sent, captured by the express.json({ verify }) hook in
+//      server.js. Do not substitute JSON.stringify(req.body); it does
+//      not round-trip and every real webhook would be rejected.
+//
+//   2. Delivery is claimed in WebhookEvent before any money moves.
+//      Razorpay retries until it gets a 2xx, so a slow response or a
+//      restart mid-handler means the same event arrives again.
+router.post('/webhook', async (req, res) => {
+  let claimId = null;
   try {
     const signature = req.headers['x-razorpay-signature'] || '';
-    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const rawBody = req.rawBody;
+
+    if (!rawBody || !rawBody.length) {
+      return res.status(400).json({ error: 'Empty request body' });
+    }
 
     if (!razorpay.verifyWebhookSignature(rawBody, signature)) {
       console.warn('⚠️  Webhook signature verification failed');
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
-    const event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const eventType = event.event;
+    const event = req.body;
+    const eventType = event && event.event;
+    if (!eventType) {
+      return res.status(400).json({ error: 'Malformed webhook payload' });
+    }
+
+    // Razorpay stamps each delivery with an event id. If one is absent
+    // — a replay tool, or a version that stops sending it — hash the
+    // body instead, so the duplicate guard still holds.
+    claimId = req.headers['x-razorpay-event-id']
+      || crypto.createHash('sha256').update(rawBody).digest('hex');
+
+    const claim = await claimWebhookDelivery(claimId, eventType);
+    if (!claim.proceed) {
+      // Already handled. Acknowledge — retrying will not help Razorpay
+      // and a non-2xx would only bring it back again.
+      return res.json({ status: 'ok', duplicate: true });
+    }
 
     if (eventType === 'payment.captured' || eventType === 'payment_link.paid') {
       const paymentId = event.payload?.payment?.entity?.id;
@@ -186,65 +219,82 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       const paymentEntity = event.payload?.payment?.entity;
       const receipt = event.payload?.order?.entity?.receipt || '';
 
-      // Receipt format: wallet_reload_{userId}_{timestamp}
+      // Receipt format: wallet_reload_{userId}_{timestamp}. The user id
+      // is a uuid, which contains hyphens but no underscores, so it is
+      // exactly the third underscore-delimited field.
       const walletUserId = receipt.startsWith('wallet_reload_')
         ? receipt.split('_')[2]
         : null;
 
       if (walletUserId && amountPaise) {
-        const config = require('../lib/config');
-        const bonusEligible = config.WALLET_BONUS_ENABLED && amountPaise >= config.WALLET_BONUS_THRESHOLD_PAISE;
-        const totalCredit = amountPaise + (bonusEligible ? config.WALLET_BONUS_AMOUNT_PAISE : 0);
-
-        let wallet = await prisma.wallet.findUnique({ where: { userId: walletUserId } });
-        if (!wallet) {
-          wallet = await prisma.wallet.create({ data: { userId: walletUserId } });
-        }
-
-        await prisma.$transaction(async (tx) => {
-          await tx.wallet.update({
-            where: { id: wallet.id },
-            data: {
-              balancePaise: { increment: totalCredit },
-              totalLoadedPaise: { increment: amountPaise },
-            },
-          });
-
-          await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              type: 'LOAD',
-              amountPaise,
-              direction: 'CREDIT',
-              description: `Wallet reloaded via Razorpay`,
-              razorpayPaymentId: paymentEntity?.id || razorpayOrderId,
-            },
-          });
-
-          if (bonusEligible) {
-            await tx.walletTransaction.create({
-              data: {
-                walletId: wallet.id,
-                type: 'BONUS_CREDIT',
-                amountPaise: config.WALLET_BONUS_AMOUNT_PAISE,
-                direction: 'CREDIT',
-                description: 'Bonus credit for premium reload',
-              },
-            });
-          }
+        const result = await paymentEngine.creditWalletReload({
+          userId: walletUserId,
+          amountPaise,
+          razorpayPaymentId: paymentEntity?.id || razorpayOrderId,
+          description: 'Wallet reloaded via Razorpay',
         });
 
         const io = req.app.get('io');
-        if (io) io.emit('wallet:updated', { userId: walletUserId });
+        if (io && !result.alreadyCredited) io.emit('wallet:updated', { userId: walletUserId });
       }
     }
+
+    await prisma.webhookEvent.update({
+      where: { eventId: claimId },
+      data: { status: 'processed', processedAt: new Date() },
+    });
 
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('POST /payment/webhook error:', err);
+
+    // Release the claim so Razorpay's retry is allowed to try again.
+    // Leaving it as 'processing' would make a transient database blip
+    // permanently swallow a real payment.
+    if (claimId) {
+      await prisma.webhookEvent.updateMany({
+        where: { eventId: claimId },
+        data: { status: 'failed', error: String(err.message || err).slice(0, 500) },
+      }).catch(() => {});
+    }
+
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
+
+/**
+ * Claim a webhook delivery for processing.
+ *
+ * The insert is the lock: eventId is unique, so two simultaneous
+ * deliveries of the same event cannot both win. A delivery is replayed
+ * only if the previous attempt failed, or if it has been stuck in
+ * 'processing' long enough that the process handling it must have died
+ * — otherwise a crash mid-handler would block the retry forever.
+ */
+async function claimWebhookDelivery(eventId, eventType) {
+  try {
+    await prisma.webhookEvent.create({ data: { eventId, eventType } });
+    return { proceed: true };
+  } catch (err) {
+    if (err.code !== 'P2002') throw err;
+  }
+
+  const existing = await prisma.webhookEvent.findUnique({ where: { eventId } });
+  if (!existing) return { proceed: true };
+
+  const stuck = existing.status === 'processing'
+    && Date.now() - new Date(existing.receivedAt).getTime() > 10 * 60 * 1000;
+
+  if (existing.status === 'failed' || stuck) {
+    await prisma.webhookEvent.update({
+      where: { eventId },
+      data: { status: 'processing', error: null, receivedAt: new Date() },
+    });
+    return { proceed: true };
+  }
+
+  return { proceed: false };
+}
 
 // ─── POST /api/payment/simulate/:caseCustomId ─────────────────
 // DEV ONLY: Simulate a successful payment

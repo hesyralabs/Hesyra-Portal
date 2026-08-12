@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "test": "node test/pricing.test.js",
+    "test": "node test/pricing.test.js && node test/payment.test.js",
+    "test:pricing": "node test/pricing.test.js",
+    "test:payment": "node test/payment.test.js",
     "seed": "node seed.js",
     "db:push": "npx prisma db push",
     "db:generate": "npx prisma generate",
@@ -32,6 +34,7 @@
     "multer": "^2.1.1",
     "nodemailer": "^9.0.5",
     "pg": "^8.20.0",
+    "razorpay": "^2.9.8",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
