@@ -40,36 +40,299 @@
   opacity: 0.9;
 }
 
-/* Kanban Board Layout */
+/* ═══ Case list ═══════════════════════════════════════════════ */
+.headerActions { display: flex; gap: 0.625rem; align-items: center; }
+
+.walletChip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.4375rem 0.75rem;
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text-primary); text-decoration: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border); border-radius: 8px;
+}
+.walletChip:hover { border-color: var(--glass-border-strong); }
+
+/* ── Attention band ── */
+.attentionBand {
+  margin-top: 0.875rem;
+  padding: 0.625rem 0.75rem;
+  background: color-mix(in srgb, #f59e0b 8%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 28%, transparent);
+  border-radius: 10px;
+}
+
+.attentionHead {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: #f59e0b;
+  margin-bottom: 0.5rem;
+}
+
+.attentionItems { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+.attentionItem {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 0.375rem 0.625rem;
+  text-align: left; cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--text-tertiary, var(--text-secondary));
+  border-radius: 7px;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+.attentionItem:hover { transform: translateY(-1px); border-color: var(--glass-border-strong); }
+
+.attentionItem.danger { border-left-color: #ef4444; }
+.attentionItem.warn   { border-left-color: #f59e0b; }
+.attentionItem.action { border-left-color: var(--brand-bioceramic); }
+.attentionItem.info   { border-left-color: #60a5fa; }
+
+.attentionPatient { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.attentionAction  { font-size: 11px; color: var(--text-secondary); }
+
+.attentionMore {
+  padding: 0.375rem 0.625rem; font-size: 11.5px; font-weight: 600;
+  color: var(--text-secondary); background: transparent;
+  border: 1px dashed var(--glass-border); border-radius: 7px; cursor: pointer;
+}
+
+/* ── Scan Day band ──────────────────────────────────────────────
+   One line. This is an opportunity, not a task, so it reads quieter
+   than the attention band above it — and it disappears entirely when
+   the clinic holds no crowns and has no window running. */
+.scanDayBand {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, #fbbf24 6%, transparent);
+  border: 1px solid color-mix(in srgb, #fbbf24 22%, transparent);
+  border-radius: 10px;
+}
+
+.scanDayIcon { color: #fbbf24; flex: 0 0 auto; }
+
+.scanDayText {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  font-size: 12.5px; min-width: 0;
+}
+
+.scanDayCredits { font-weight: 600; color: #fbbf24; }
+
+.scanDayProgress { color: var(--text-secondary); }
+
+.scanDaySep {
+  display: inline-block; width: 3px; height: 3px; border-radius: 50%;
+  background: var(--text-tertiary); vertical-align: middle;
+  margin-right: 6px;
+}
+
+.scanDayAction {
+  margin-left: auto; flex: 0 0 auto;
+  padding: 0.25rem 0.7rem;
+  font-size: 12px; font-weight: 600;
+  color: #fbbf24; text-decoration: none;
+  border: 1px solid color-mix(in srgb, #fbbf24 35%, transparent);
+  border-radius: 999px;
+}
+
+.scanDayAction:hover { background: color-mix(in srgb, #fbbf24 12%, transparent); }
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; margin: 0.875rem 0 0.625rem;
+}
+
+.segments {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: color-mix(in srgb, var(--bg-deep) 30%, transparent);
+  border: 1px solid var(--glass-border); border-radius: 9px;
+}
+
+.segment {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.375rem 0.75rem;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent; border: 0; border-radius: 7px;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.segment:hover:not(:disabled) { color: var(--text-primary); }
+.segment:disabled { opacity: 0.35; cursor: default; }
+
+.segmentOn, .segmentOn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+}
+
+.segCount {
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  padding: 0 5px; border-radius: 999px;
+  background: var(--glass-bg); color: var(--text-secondary);
+}
+.segmentOn .segCount { background: color-mix(in srgb, var(--brand-bioceramic) 20%, transparent); color: var(--brand-bioceramic); }
+
+.search {
+  width: 240px; padding: 0.4375rem 0.75rem;
+  font-size: 12.5px; font-family: inherit;
+  color: var(--text-primary); background: var(--bg-surface);
+  border: 1px solid var(--glass-border); border-radius: 8px;
+}
+.search:focus { outline: none; border-color: var(--brand-bioceramic); }
+
+/* ── List ── */
+.caseList {
+  display: flex; flex-direction: column;
+  flex: 1; min-height: 0;
+  border: 1px solid var(--glass-border); border-radius: 11px;
+  overflow: hidden;
+}
+
+.listHead, .caseRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(220px, 1.6fr) minmax(130px, 0.9fr) 92px;
+  align-items: center; gap: 1rem;
+  padding: 0 0.875rem;
+}
+
+.listHead {
+  height: 32px; flex-shrink: 0;
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-deep) 30%, transparent);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.colRight { text-align: right; }
+
+.listBody { flex: 1; min-height: 0; overflow-y: auto; }
+
+.caseRow {
+  min-height: 52px; padding-top: 8px; padding-bottom: 8px;
+  cursor: pointer; text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 55%, transparent);
+  transition: background 0.12s ease;
+}
+.caseRow:last-child { border-bottom: 0; }
+.caseRow:hover { background: var(--glass-bg-hover); }
+.caseRow:focus-visible { outline: 2px solid var(--brand-bioceramic); outline-offset: -2px; }
+
+/* A left rule flags the rows the doctor owns without shouting. */
+.rowNeedsYou { box-shadow: inset 3px 0 0 #f59e0b; }
+.rowDone .patientName, .rowDone .caseMeta { opacity: 0.6; }
+
+.cellPatient { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.patientName {
+  font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.caseMeta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden;
+}
+.caseType { overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: 0.5; flex-shrink: 0; }
+
+/* ── Progress track ── */
+.track { display: flex; gap: 4px; min-width: 0; }
+
+.step { flex: 1 1 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.stepBar {
+  height: 3px; border-radius: 2px;
+  background: var(--glass-border);
+  transition: background 0.2s ease;
+}
+
+.stepLabel {
+  font-size: 9.5px; letter-spacing: 0.02em;
+  color: var(--text-secondary); opacity: 0.55;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.stepDone .stepBar { background: color-mix(in srgb, var(--brand-bioceramic) 55%, transparent); }
+.stepNow  .stepBar { background: var(--brand-bioceramic); }
+.stepNow  .stepLabel { color: var(--brand-bioceramic); opacity: 1; font-weight: 600; }
+
+/* ── Status cell ── */
+.cellStatus { min-width: 0; }
+
+.labState {
+  font-size: 12px; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+
+.actionChip {
+  display: inline-block; max-width: 100%;
+  padding: 3px 8px;
+  font-size: 11.5px; font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.actionChip.danger { background: color-mix(in srgb, #ef4444 14%, transparent); color: #fca5a5; }
+.actionChip.warn   { background: color-mix(in srgb, #f59e0b 14%, transparent); color: #fbbf24; }
+.actionChip.action { background: color-mix(in srgb, var(--brand-bioceramic) 16%, transparent); color: var(--brand-bioceramic); }
+.actionChip.info   { background: color-mix(in srgb, #60a5fa 14%, transparent); color: #93c5fd; }
+
+.cellDate {
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
+  color: var(--text-secondary); white-space: nowrap;
+}
+
+.skeletons { display: flex; flex-direction: column; gap: 2px; padding: 6px; }
+
+.emptyLink { color: var(--brand-bioceramic); }
+
+/* ─── Kanban board (legacy) ────────────────────────────────── */
+/* Every stage shares the width instead of sitting on a fixed 300px
+   track. Nine fixed columns meant 2,700px of board and a horizontal
+   scrollbar — you had to scroll sideways just to find where a case
+   was, which defeats the point of a status board. */
 .kanbanBoard {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(var(--stage-count, 9), minmax(0, 1fr));
+  gap: 8px;
   flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 16px; 
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 8px;
 }
 
 .kanbanColumn {
-  flex: 0 0 300px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  /* A panel per stage — the lanes now read as distinct containers
+     rather than free-floating cards on a flat background. */
+  background: color-mix(in srgb, var(--bg-deep) 28%, transparent);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 /* Column Header */
 .columnHeader {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: 8px;
+  padding: 0 0 8px;
+  flex-shrink: 0;
 }
 
 .columnProgressBar {
-  height: 2px;
-  background: var(--glass-bg);
-  border-radius: var(--radius-pill);
+  height: 3px;
+  background: transparent;
   overflow: hidden;
   position: relative;
 }
@@ -94,68 +357,71 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px;
+  padding: 7px 8px 0;
 }
 
 .columnTitle {
-  font-size: 12px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.07em;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
+  /* Narrow lanes — a long stage name must not wrap the header. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .columnCount {
-  font-size: 12px;
-  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
   background: var(--glass-bg);
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-pill);
+  flex-shrink: 0;
 }
 
 .columnContent {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px 4px 16px 0; /* Padding-top prevents hover clipping */
+  gap: 6px;
+  padding: 6px;
 }
 
 .emptyState {
-  padding: 24px;
+  padding: 2.5rem 1rem;
   text-align: center;
-  border: 1px dashed var(--glass-border);
-  border-radius: var(--radius-card);
-  background: var(--glass-bg);
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
-.emptyIcon {
-  opacity: 0.3;
-  margin-bottom: 8px;
-  color: var(--text-primary);
-}
+.emptyIcon { display: none; }
 
 /* Case Cards */
 .caseCard {
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-card);
-  padding: 20px;
+  border-radius: 8px;
+  padding: 9px 10px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 6px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.15s ease, background 0.15s ease;
   position: relative;
   text-decoration: none;
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .caseCard:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--glass-border-strong);
+  border-color: var(--brand-bioceramic);
+  background: color-mix(in srgb, var(--brand-bioceramic) 6%, var(--bg-surface));
 }
 
 .isDragging {
@@ -181,13 +447,20 @@
   align-items: center;
 }
 
+/* Sized to fit a full case ID (20 chars) inside the narrowest lane
+   without truncating — an identifier you can only half-read is worse
+   than no identifier. */
 .caseId {
-  font-size: 13px;
+  font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .caseId::before {
@@ -207,23 +480,31 @@
 .colShipped .caseId::before { background: var(--status-shipped); }
 
 .patientName {
-  font-size: 18px;
-  font-weight: 400;
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rxDetails {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text-secondary);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .rxItem {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rxIcon {
@@ -248,10 +529,12 @@
 .cardFooter {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 4px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
   border-top: 1px solid var(--glass-border);
-  padding-top: 16px;
+  padding-top: 6px;
+  font-size: 10.5px;
 }
 
 .metaText {

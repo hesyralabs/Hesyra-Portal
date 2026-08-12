@@ -31,7 +31,7 @@ async function check() {
   }
 
   const doctor = await prisma.user.findFirst({
-    where: { role: 'dentist' },
+    where: { role: 'clinic' },
     select: { id: true, email: true, preferredPaymentMode: true },
   });
   console.log('\n=== DOCTOR ===');

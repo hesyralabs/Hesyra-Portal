@@ -13,6 +13,7 @@ const STATUS_CONFIG = {
   cad_assigned:       { label: 'CAD Assigned',     color: '#a78bfa' },
   blocked:            { label: 'Blocked',           color: '#ef4444' },
   design_ready:       { label: 'Design Ready',     color: '#34d399' },
+  awaiting_doctor_approval: { label: 'With Doctor', color: '#f0abfc' },
   design_revision:    { label: 'Revision',         color: '#fb923c' },
   design_approved:    { label: 'Approved',         color: '#34d399' },
   post_processing:    { label: 'Post-Process',     color: '#fcd34d' },

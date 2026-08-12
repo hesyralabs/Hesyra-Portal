@@ -5,7 +5,7 @@ const prisma = require('./server/lib/prisma');
 async function verify() {
   console.log('\n--- VERIFYING DOCTOR ACCOUNTS ---');
   const users = await prisma.user.findMany({
-    where: { role: 'dentist' },
+    where: { role: 'clinic' },
     select: { customId: true, username: true, stateCode: true, cityCode: true, docSerial: true }
   });
   console.table(users);

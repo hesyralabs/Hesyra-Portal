@@ -25,6 +25,8 @@ const TechDashboard = () => {
   const [totalReady, setTotalReady] = useState(0);
   const [batches, setBatches]       = useState([]);
   const [ceramists, setCeramists]   = useState([]);
+  // Where the last completed batch's cases were routed.
+  const [routeNote, setRouteNote]   = useState('');
   const [loading, setLoading]       = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSeg, setExpandedSeg] = useState({});
@@ -116,13 +118,30 @@ const TechDashboard = () => {
   const completeBatch = async (batchId) => {
     if (processing) return;
     setProcessing(true);
+    setRouteNote('');
     try {
       const res = await fetch(`${API}/api/batch/${batchId}/complete`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
       });
-      if (res.ok) fetchAll();
-    } catch {}
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setRouteNote(d.error || 'Could not close the batch.'); return; }
+
+      // Say where the work went. Closing a batch used to report nothing,
+      // so there was no way to tell whether anything had reached the
+      // ceramist short of logging in as one.
+      const parts = [];
+      if (d.toFinishing) parts.push(`${d.toFinishing} to finishing${d.assignedTo ? ` with ${d.assignedTo}` : ''}`);
+      if (d.toQc) parts.push(`${d.toQc} straight to QC`);
+      setRouteNote(
+        d.awaitingCeramist
+          ? `${d.toFinishing} case${d.toFinishing > 1 ? 's need' : ' needs'} ceramic finishing but no ceramist account is active — assign one below.`
+          : parts.join(' · ') || 'Batch closed.'
+      );
+      fetchAll();
+    } catch {
+      setRouteNote('The server could not be reached — the batch was not closed.');
+    }
     finally { setProcessing(false); }
   };
 
@@ -208,6 +227,25 @@ const TechDashboard = () => {
           <span className={styles.metricLabel}>Active Batches</span>
         </div>
       </section>
+
+      {/* Where the last closed batch went. Sits at page level because a
+          completed batch leaves the Active list immediately — reporting
+          this inside the batch card meant it vanished with it. */}
+      {routeNote && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+          margin: '0 0 1rem', padding: '0.6rem 0.9rem', borderRadius: 10,
+          fontSize: '0.8rem',
+          background: 'rgba(122,156,150,0.1)',
+          border: '1px solid rgba(122,156,150,0.3)',
+          color: 'var(--brand-bioceramic)',
+        }}>
+          <span>{routeNote}</span>
+          <button onClick={() => setRouteNote('')}
+            style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+            aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════
           SECTION 1: AUTO-SEGMENTED QUEUE

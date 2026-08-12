@@ -25,6 +25,149 @@
   margin: 0;
 }
 
+/* ─── Choice groups ────────────────────────────────────────── */
+/* Used where a setting changes how the lab behaves. Radio buttons hide
+   the consequence; a labelled card can carry the trade-off in full,
+   which matters for things like "start production without my sign-off". */
+.settingBlock {
+  margin-top: 1.25rem;
+}
+
+.settingLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 0.625rem;
+}
+
+.choiceList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+@media (min-width: 720px) {
+  .choiceList { grid-template-columns: repeat(2, 1fr); }
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0.75rem 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.choice:hover { border-color: var(--glass-border-strong); }
+
+.choice:focus-visible {
+  outline: 2px solid var(--brand-bioceramic);
+  outline-offset: 2px;
+}
+
+.choiceSelected,
+.choiceSelected:hover {
+  border-color: var(--brand-bioceramic);
+  box-shadow: inset 3px 0 0 var(--brand-bioceramic);
+  background: color-mix(in srgb, var(--brand-bioceramic) 8%, var(--bg-surface));
+}
+
+.choiceTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.choiceSelected .choiceTitle { color: var(--brand-bioceramic); }
+
+.choiceDesc {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ─── Alert toggles ────────────────────────────────────────── */
+.toggleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  transition: border-color 0.15s ease;
+}
+
+.toggleRow:hover { border-color: var(--glass-border-strong); }
+
+.toggleRow input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--brand-bioceramic);
+  flex-shrink: 0;
+}
+
+.toggleBody { display: flex; flex-direction: column; gap: 2px; }
+
+.toggleLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toggleDesc {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.sectionNote {
+  margin-top: 1rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-deep) 25%, transparent);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+
+.btnGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.btnGhost:hover {
+  color: var(--text-primary);
+  border-color: var(--glass-border-strong);
+}
+
 .layout {
   display: flex;
   gap: 2rem;

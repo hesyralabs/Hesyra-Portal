@@ -1,23 +1,40 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../utils/api';
+import { useAuth } from './AuthContext';
 
 const SystemContext = createContext(null);
 
 export const SystemProvider = ({ children }) => {
+  const { user } = useAuth();
   const [broadcast, setBroadcast] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
 
   // ─── Load initial data from API ───────────────────────────
+  // Both endpoints need a JWT, so this waits for the session — firing on
+  // mount alone 401s on every page load and leaves an admin with no
+  // broadcast or audit data until they reload.
+  const userId = user?.id;
+
   useEffect(() => {
-    // Try to load broadcast (may fail if not admin — that's fine)
+    if (!userId) {
+      setBroadcast(null);
+      setAuditLogs([]);
+      return;
+    }
+
+    // Broadcasts are portal-wide — every signed-in role reads these.
     adminAPI.getBroadcast()
       .then(data => { if (data) setBroadcast(data); })
       .catch(() => {});
 
-    adminAPI.getAuditLogs()
-      .then(data => setAuditLogs(data))
-      .catch(() => {});
-  }, []);
+    // The audit log is admin-only. Asking for it as anyone else just
+    // produces a guaranteed 403 in the console on every page load.
+    if (user?.role === 'admin') {
+      adminAPI.getAuditLogs()
+        .then(data => setAuditLogs(data))
+        .catch(() => {});
+    }
+  }, [userId, user?.role]);
 
   // ─── Socket.io real-time broadcast sync ────────────────────
   useEffect(() => {

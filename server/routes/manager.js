@@ -366,22 +366,39 @@ router.put('/tickets/:id', requirePermission('tickets.respond'), async (req, res
 // ─── GET /api/manager/clinics/:userId/wallet ───────────────────
 router.get('/clinics/:userId/wallet', requirePermission('wallet.view_any_clinic'), async (req, res) => {
   try {
+    const isManager = req.user.role === 'manager';
+
     const wallet = await prisma.wallet.findUnique({
       where: { userId: req.params.userId },
-      include: {
-        transactions: { orderBy: { createdAt: 'desc' }, take: 50 },
-      },
+      include: isManager
+        ? undefined
+        : { transactions: { orderBy: { createdAt: 'desc' }, take: 50 } },
     });
 
     if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
 
-    // Manager gets read-only — balance and transaction history only
+    // A manager sees credit STANDING, not the ledger.
+    //
+    // The standing is operationally necessary: a manager decides whether
+    // a case dispatches, and that turns on whether a prepaid clinic has
+    // funds or a Net-30 clinic is inside its limit. The history is not —
+    // no dispatch decision needs to know a clinic topped up ₹5,000 last
+    // Tuesday. Lifetime loaded/spent and the transaction list are
+    // therefore withheld here, not merely hidden in the UI.
+    if (isManager) {
+      return res.json({
+        balancePaise: wallet.balancePaise,
+        readOnly:     true,
+        ledgerHidden: true,
+      });
+    }
+
     res.json({
       balancePaise:     wallet.balancePaise,
       totalLoadedPaise: wallet.totalLoadedPaise,
       totalSpentPaise:  wallet.totalSpentPaise,
       transactions:     wallet.transactions,
-      readOnly:         true,
+      readOnly:         false,
     });
   } catch (err) {
     console.error('GET /manager/clinics/:userId/wallet error:', err);
@@ -540,21 +557,41 @@ router.put('/cases/:id/design-action', requirePermission('cases.advance_state'),
       return res.status(400).json({ error: 'Cannot approve design — a technician must be assigned to the case first' });
     }
 
-    const newStatus = action === 'approve' ? 'design_approved' : 'design_revision';
+    // Lab QC passing does not start production — it releases the design to
+    // the ordering doctor for clinical sign-off.
+    const newStatus = action === 'approve' ? 'awaiting_doctor_approval' : 'design_revision';
+
+    const now = new Date();
+    const slaHours = c.priorityFlag
+      ? config.DESIGN_APPROVAL_SLA_HOURS_PRIORITY
+      : config.DESIGN_APPROVAL_SLA_HOURS;
+    const dueAt = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
 
     await prisma.case.update({
       where: { customId: req.params.id },
       data: {
         status: newStatus,
-        ...(action === 'revise' ? { rejectionReason: reason.trim() } : { rejectionReason: null }),
+        ...(action === 'revise'
+          ? { rejectionReason: reason.trim() }
+          : {
+              rejectionReason: null,
+              doctorApprovalSentAt: now,
+              doctorApprovalDueAt: dueAt,
+              approvalRemindersSent: 0,
+              approvalEscalatedAt: null,
+            }),
       },
     });
 
     await prisma.timeline.create({
       data: {
         caseId: c.id,
-        label: action === 'approve' ? '✅ Design Approved by Manager' : '↩️ Revision Requested by Manager',
-        info:  action === 'revise' ? reason.trim() : undefined,
+        label: action === 'approve'
+          ? '👨‍⚕️ Design sent to doctor for approval'
+          : '↩️ Revision Requested by Manager',
+        info: action === 'revise'
+          ? reason.trim()
+          : `Lab QC passed. Awaiting clinical sign-off — due ${dueAt.toLocaleString('en-IN')}.`,
       },
     });
 
@@ -575,7 +612,7 @@ router.put('/cases/:id/design-action', requirePermission('cases.advance_state'),
 // ─── PUT /api/manager/clinics/:id/billing ──────────────────────
 // Grant or revoke net-30 credit terms for a clinic.
 // Body: { billingMode, creditLimitPaise }
-router.put('/clinics/:id/billing', requirePermission('wallet.view_any_clinic'), async (req, res) => {
+router.put('/clinics/:id/billing', requirePermission('billing.set_terms'), async (req, res) => {
   try {
     const { billingMode, creditLimitPaise } = req.body;
 
@@ -610,7 +647,7 @@ router.put('/clinics/:id/billing', requirePermission('wallet.view_any_clinic'), 
     // Audit log — credit grants must be traceable
     await logAudit({
       req,
-      action: AUDIT_ACTIONS.CASE_STATE_FORCE, // Reusing closest audit action type
+      action: AUDIT_ACTIONS.CREDIT_TERMS_CHANGED,
       entityType: 'user',
       entityId: clinic.id,
       beforeState: { billingMode: clinic.billingMode, creditLimitPaise: clinic.creditLimitPaise },
@@ -686,7 +723,7 @@ router.get('/clinics/:id/credit', requirePermission('wallet.view_any_clinic'), a
 // ─── POST /api/manager/invoices/generate ───────────────────────
 // Manually trigger monthly invoice generation for a billing period.
 // Body: { billingPeriod } — e.g. "2026-05". Defaults to last month.
-router.post('/invoices/generate', requirePermission('wallet.view_any_clinic'), async (req, res) => {
+router.post('/invoices/generate', requirePermission('billing.generate_invoices'), async (req, res) => {
   try {
     const { billingPeriod } = req.body; // Optional — auto-defaults to last month in runMonthlyInvoicing
     const io = req.app.get('io');

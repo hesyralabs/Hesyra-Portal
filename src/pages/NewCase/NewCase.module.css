@@ -3,23 +3,27 @@
 .container {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  max-width: 800px;
+  /* Tight — every pixel spent here is a pixel of form pushed below
+     the fold. */
+  gap: 0.625rem;
+  /* Wide enough to seat a three-column form AND the cost summary side
+     by side, so a whole prescription fits above the fold. */
+  max-width: 1400px;
   margin: 0 auto;
 }
 
 .header {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
 }
 
 .backLink {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   color: var(--text-secondary);
   font-weight: 500;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.25rem;
   text-decoration: none;
 }
 
@@ -28,10 +32,11 @@
 }
 
 .title {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 300;
   color: var(--text-primary);
   margin-bottom: 0px;
+  line-height: 1.2;
 }
 
 .subtitle {
@@ -43,26 +48,64 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.08em;
   font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--glass-bg);
-  padding: 0.5rem 1rem;
+  color: var(--text-tertiary);
+  background: var(--bg-deep, #0b1220);
+  padding: 0.3125rem 0.875rem 0.3125rem 0.4375rem;
   border-radius: var(--radius-pill);
   border: 1px solid var(--glass-border);
   z-index: 2;
+  cursor: default;
 }
 
-.activeStep {
+/* The number badge doubles as the tick once the step is behind you. */
+.stepMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  font-size: 9.5px;
+  line-height: 1;
+}
+
+.stepDone {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--brand-bioceramic) 35%, transparent);
+  cursor: pointer;
+}
+
+.stepDone .stepMark {
+  background: var(--brand-bioceramic);
+  border-color: var(--brand-bioceramic);
+  color: var(--bg-base);
+}
+
+.stepDone:hover { color: var(--text-primary); }
+
+.stepCurrent {
   background: var(--text-primary);
   color: var(--bg-base);
   border-color: var(--text-primary);
+}
+
+.stepCurrent .stepMark {
+  background: var(--bg-base);
+  border-color: var(--bg-base);
+  color: var(--text-primary);
 }
 
 .stepLine {
@@ -73,11 +116,15 @@
   z-index: 1;
 }
 
+/* Fills in behind you, so the bar carries progress rather than just
+   spacing the three pills apart. */
+.stepLineDone { background-color: color-mix(in srgb, var(--brand-bioceramic) 55%, transparent); }
+
 .formCard {
   background: var(--glass-bg);
   backdrop-filter: var(--blur-heavy);
   border-radius: var(--radius-card);
-  padding: 2.5rem;
+  padding: 1rem;
   border: 1px solid var(--glass-border);
 }
 
@@ -102,11 +149,23 @@
   gap: 1.5rem;
 }
 
+/* Sentence case, deliberately. The section legend above is already
+   uppercase; making the field label uppercase too gave the form two
+   shouting layers and no hierarchy — every word had the same weight. */
 .inputGroup label {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-secondary);
-  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+/* A short qualifier that belongs with the label but must not compete
+   with it — notation systems, units, "optional". */
+.labelHint {
+  margin-left: 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--text-tertiary);
 }
 
 .inputGroup input,
@@ -150,51 +209,481 @@
 }
 
 /* Category Grid */
-.caseTypeGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
+/* ─── Section headings ─────────────────────────────────────── */
+.sectionHead {
+  margin-bottom: 0;
 }
 
-.typeCard {
-  background: var(--glass-bg);
+.sectionTitleCompact {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sectionHint {
+  margin: 0.375rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+
+/* ─── Case type catalogue ──────────────────────────────────── */
+/* Laid out as a rate card: one row per case type, prices and lead
+   times in fixed columns so they can be compared down the page.
+   Deliberately no iconography — a glyph beside each row is decoration
+   that adds nothing a dentist reading a price list needs. */
+.catalogue {
+  --col-price: 120px;
+  --col-lead: 110px;
   border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  padding: 1.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.catalogueHead,
+.typeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--col-price) var(--col-lead);
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
   text-align: left;
+}
+
+.catalogueHead {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-deep) 35%, transparent);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.colRight { text-align: right; }
+
+/* Eleven case types is a long single list. Splitting the groups into
+   balanced columns keeps the whole catalogue on one screen; each
+   column keeps its own price / lead-time alignment. */
+.catalogueBody { column-count: 1; column-gap: 0; }
+
+@media (min-width: 1080px) {
+  .catalogueBody { column-count: 2; }
+  .catalogueBody .catalogueGroup:not(:first-child) { border-left: 0; }
+  /* Vertical rule between the two halves. */
+  .catalogueBody { column-rule: 1px solid var(--glass-border); }
+}
+
+.catalogueGroup {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.groupLabel {
+  margin: 0;
+  padding: 0.4375rem 1rem 0.3125rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-bioceramic);
+  background: color-mix(in srgb, var(--bg-deep) 20%, transparent);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.catalogueGroup + .catalogueGroup .groupLabel { border-top: 1px solid var(--glass-border); }
+
+/* Tighter rows so eleven of them stay above the fold. */
+.catalogueHead,
+.typeRow { padding: 0.4375rem 0.875rem; }
+
+.typeRow {
+  position: relative;
+  width: 100%;
   cursor: pointer;
-  transition: all 0.2s ease;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 60%, transparent);
+  align-items: center;
+  transition: background 0.12s ease;
+}
+
+.catalogueGroup:last-child .typeRow:last-child { border-bottom: 0; }
+
+.typeRow:hover { background: var(--glass-bg-hover); }
+
+.typeRow:focus-visible {
+  outline: 2px solid var(--brand-bioceramic);
+  outline-offset: -2px;
+}
+
+/* A left rule marks the selection — quieter than a filled row and it
+   survives both themes. */
+.typeRowSelected,
+.typeRowSelected:hover {
+  background: color-mix(in srgb, var(--brand-bioceramic) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--brand-bioceramic);
+}
+
+.typeBody {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 1px;
+  min-width: 0;
 }
 
-.typeCard:hover {
-  background: var(--glass-bg-hover);
-  border-color: var(--glass-border-strong);
+.typeName {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
 }
 
-.typeCardSelected {
-  background: rgba(122, 156, 150, 0.15);
-  border-color: var(--brand-bioceramic);
+.typeRowSelected .typeName { color: var(--brand-bioceramic); }
+
+.typeDesc {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
-.typeIcon {
-  color: var(--brand-bioceramic);
+.typePrice {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.typePriceFrom {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-right: 1px;
+}
+
+.typeQuoted {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.typeTurnaround {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ─── Prescription layout ──────────────────────────────────── */
+/* Form on the left, running cost on the right. On narrow screens the
+   summary drops below the form rather than competing with it. */
+.rxLayout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Only split once there is genuinely room for both. Below this the
+   summary sits under the form at full width — a 390px form column with
+   a wrapped tooth chart helps nobody. */
+@media (min-width: 1024px) {
+  .rxLayout { grid-template-columns: minmax(0, 1fr) 300px; gap: 2rem; }
+}
+
+.rxMain { min-width: 0; }
+
+.rxAside { min-width: 0; }
+
+@media (min-width: 1024px) {
+  .rxAside { position: sticky; top: 1.5rem; }
+}
+
+/* The fieldsets flow into two columns so a whole prescription fits on
+   one screen. A doctor filling this chairside should not be scrolling
+   up and down to check what they have missed. */
+.rxMain {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  align-content: start;
+  /* Without this each box stretches to its tallest row neighbour —
+     the Patient block was 347px tall to sit beside the tooth chart. */
+  align-items: start;
+}
+
+/* Two balanced columns of stacked fieldsets. Grid auto-flow was the
+   wrong tool here: it lays out row by row, so the tooth chart and the
+   material grid — the two tall blocks — always landed on separate rows
+   and their heights added up. Stacking them in parallel columns means
+   the form is only as tall as the taller column. */
+/* CSS multi-column rather than flex or grid. The form's content varies
+   a lot by case type — an aligner has no material picker, a guide has
+   no tooth chart — so fixed columns end up badly lopsided. Multi-column
+   balances the fieldsets by height automatically, whatever is on
+   screen, which is what actually keeps the form above the fold. */
+.rxCols {
+  column-count: 1;
+  column-gap: 0.75rem;
+  /* Clearance for the sticky action bar. Without it the bar pins to the
+     bottom of a container that is not scrollable, and whatever the
+     columns end on — here the last row of the material picker — sits
+     under it permanently, with no way to scroll it clear. */
+  padding-bottom: 72px;
+}
+
+/* The wrappers exist only to group markup; they must not become
+   column items themselves or balancing breaks. */
+.rxCol { display: contents; }
+
+@media (min-width: 1080px) {
+  .rxCols { column-count: 2; }
+}
+
+.rxCols .fieldset {
+  /* Never split a fieldset across a column boundary. */
+  break-inside: avoid;
+  page-break-inside: avoid;
   margin-bottom: 0.5rem;
 }
 
-.typeCard h3 {
-  font-size: 1rem;
-  color: var(--text-primary);
-  font-weight: 500;
+/* Groups the flat run of inputs into scannable blocks. */
+.fieldset {
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 0.625rem 0.875rem 0;
+  margin-bottom: 0;
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  min-width: 0;
 }
 
-.typeCard p {
+/* Denser vertical rhythm — the old 1.5rem gaps were the main reason
+   this form ran off the bottom of the screen. */
+.fieldset .inputGroup { margin-bottom: 0.625rem; }
+.fieldset label { margin-bottom: 0.125rem; }
+
+.fieldsetLegend {
+  margin-bottom: 0.625rem;
+  padding-bottom: 0.4375rem;
+}
+
+.fieldsetLegend {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  padding-bottom: 0.625rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* ─── Cost summary ─────────────────────────────────────────── */
+.summaryCard {
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 1.125rem;
+  background: var(--bg-surface);
+}
+
+.summaryHead {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-secondary);
+  margin-bottom: 0.875rem;
+}
+
+.summaryList { margin: 0; }
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.3125rem 0;
+  font-size: 0.8125rem;
+}
+
+.summaryRow dt { color: var(--text-secondary); flex-shrink: 0; }
+
+.summaryRow dd {
+  margin: 0;
+  color: var(--text-primary);
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+.summaryDivider {
+  height: 1px;
+  background: var(--glass-border);
+  margin: 0.875rem 0;
+}
+
+/* Scan Day complimentary crown — an entitlement against this case,
+   never wallet money, so it sits with the price rather than the wallet. */
+.creditOffer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 0.875rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.07);
+  cursor: pointer;
+}
+
+.creditOffer input { margin-top: 2px; accent-color: #fbbf24; cursor: pointer; }
+
+.creditOffer strong {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.creditMeta {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.summaryTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--glass-border-strong);
+}
+
+.summaryTotal span {
   font-size: 0.8125rem;
   color: var(--text-secondary);
-  margin: 0;
 }
+
+.summaryTotal strong {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.summaryNote {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* Material card price */
+.materialPrice {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.materialPriceUnit {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tierPrice {
+  margin-left: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-bioceramic);
+}
+
+/* ─── Aligner treatment tiers ──────────────────────────────── */
+/* Two-up so five treatment tiers take three rows, not five — a single
+   column pushed the aligner form well below the fold. */
+.tierList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 0.375rem;
+}
+
+.tierRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tierRow:hover { border-color: var(--glass-border-strong); }
+
+.tierRowSelected,
+.tierRowSelected:hover {
+  border-color: var(--brand-bioceramic);
+  box-shadow: inset 3px 0 0 var(--brand-bioceramic);
+  background: color-mix(in srgb, var(--brand-bioceramic) 7%, var(--bg-surface));
+}
+
+.tierRowBody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.tierRowName {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Hidden in the compact tile — the tier names carry the meaning, and
+   the full description would triple the height of the picker. */
+.tierRowNote { display: none; }
+
+.tierRowPrice {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tierRowUnit {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkRow input { width: 16px; height: 16px; accent-color: var(--brand-bioceramic); }
 
 /* Arch Toggle */
 .archToggleGroup {
@@ -225,12 +714,35 @@
 }
 
 /* Tooth Selector */
+/* Restoration is full width, so the type selector and the arch sit side
+   by side rather than stacked. Stacking them was what pushed the form
+   past the fold again — the arch got its width by spending height it
+   did not have. A 1000px-wide dropdown would be absurd anyway. */
+.rxRestoration {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 1.75rem;
+}
+
+.rxRestoration > .fieldsetLegend { flex: 1 0 100%; }
+
+.rxRestoration > .inputGroup { flex: 0 0 300px; }
+
+.rxRestoration > .toothSelectorSection {
+  flex: 1 1 420px;
+  /* No rule or spacing: it is a column here, not a section below. */
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Sits inside a fieldset that already has a border and padding, so a
+   second box around it was box-in-box chrome. Padding only. */
 .toothSelectorSection {
-  margin-bottom: 1.5rem;
-  background: rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  padding: 1.5rem;
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--glass-border);
 }
 
 .toothSelectorSection > label {
@@ -238,46 +750,115 @@
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  margin-bottom: 1rem;
+  margin-bottom: 0.625rem;
 }
 
-.archContainer {
+/* ─── The arch ─────────────────────────────────────────────────
+   Two arcs facing each other, enclosing the mouth. The per-tooth
+   translateY is set inline from k·t² (t = distance from the midline),
+   because the curve is data about position, not decoration — it is
+   what lets you find tooth 26 by pointing rather than by reading. */
+.archChart {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  align-items: center;
+  gap: 10px;
+  align-items: stretch;
+  /* Capped so it does not sprawl on a wide screen. Must stay above
+     16×(tooth max) + gaps + midline + padding or the teeth hit their
+     max-width and the arch overflows into a scrollbar. */
+  max-width: 780px;
+  padding: 2px 22px 0;
+  /* Last resort on very narrow screens — scrolling an intact arch beats
+     wrapping it into meaningless fragments. */
+  overflow-x: auto;
 }
+
+/* Patient's right is the chart's left. Worth stating: getting this
+   backwards is how a crown ends up on the wrong side of the mouth. */
+.archSide {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.archSideR { left: 2px; }
+.archSideL { right: 2px; }
 
 .archRow {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
+  /* An arch is one continuous row. Wrapping it mid-quadrant makes the
+     chart unreadable, so the teeth shrink instead of breaking. */
+  flex-wrap: nowrap;
   justify-content: center;
+  min-width: min-content;
+  /* Room for the curve to drop into without clipping. */
+  height: 42px;
+}
+
+/* Reads back the selection so you never have to count buttons. */
+.archFoot {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.archFoot strong { color: var(--text-primary); font-weight: 600; }
+
+.archFootEmpty { color: var(--text-tertiary); }
+
+.archFootList {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
 }
 
 .toothBtn {
-  width: 36px;
-  height: 48px;
+  flex: 1 1 0;
+  min-width: 21px;
+  max-width: 36px;
+  height: 32px;
+  /* Fixed height inside a taller row: the row reserves space for the
+     curve, the tooth must not stretch to fill it. */
+  flex-shrink: 0;
+  align-self: flex-start;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.archRow:first-child .toothBtn { border-radius: 8px 8px 16px 16px; }
-.archRow:last-child .toothBtn { border-radius: 16px 16px 8px 8px; }
+/* Crowns face the occlusal plane: the upper arch's biting edge is its
+   bottom, the lower arch's is its top. Rounding the other end makes
+   each row read as a jaw rather than as a strip of buttons. */
+.archRow:first-child .toothBtn { border-radius: 9px 9px 4px 4px; }
+.archRow:last-child .toothBtn  { border-radius: 4px 4px 9px 9px; }
 
 .toothBtn:hover {
   background: var(--glass-bg-hover);
   border-color: var(--glass-border-strong);
   color: var(--text-primary);
+}
+
+.toothBtn:focus-visible {
+  outline: 2px solid var(--brand-bioceramic);
+  outline-offset: 2px;
 }
 
 .toothSelected {
@@ -293,11 +874,102 @@
   box-shadow: 0 0 10px rgba(122, 156, 150, 0.3);
 }
 
-.archDivider {
-  height: 1px;
-  width: 100%;
-  background: var(--glass-border);
+/* ─── Uploads: one slot per scan the lab needs ─────────────────── */
+.uploadHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.875rem;
 }
+
+.uploadReady {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; font-weight: 600; color: #34d399;
+}
+
+.uploadPending { font-size: 0.78rem; color: #fbbf24; }
+
+.scanSlots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.75rem;
+}
+
+.scanSlot {
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 0.75rem 0.875rem;
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+}
+
+.scanSlotNeeded { border-color: color-mix(in srgb, #fbbf24 32%, transparent); }
+.scanSlotFilled { border-color: color-mix(in srgb, #34d399 35%, transparent); }
+
+.scanSlotHead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 0.5rem; margin-bottom: 0.5rem;
+}
+
+.scanSlotName { font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); }
+
+.scanReq { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #fbbf24; }
+
+.scanOpt { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-tertiary); }
+
+.scanDrop {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 0.875rem 0.5rem;
+  border: 1px dashed var(--glass-border);
+  border-radius: 10px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.scanDrop:hover { border-color: var(--brand-bioceramic); color: var(--text-secondary); }
+
+.scanDropText { font-size: 0.78rem; font-weight: 500; }
+.scanFormats { font-size: 0.625rem; letter-spacing: 0.04em; }
+.scanHint { font-size: 0.625rem; color: var(--text-tertiary); font-style: italic; }
+
+.scanSlotFile {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0.5rem 0.625rem;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  border-radius: 10px;
+  color: #34d399;
+  min-width: 0;
+}
+
+.scanFileName {
+  flex: 1; min-width: 0;
+  font-size: 0.75rem; font-weight: 500; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.scanFileSize { font-size: 0.6875rem; color: var(--text-tertiary); white-space: nowrap; }
+
+.scanRemove {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-tertiary); font-size: 1rem; line-height: 1;
+  padding: 0 2px;
+}
+.scanRemove:hover { color: #f87171; }
+
+.extraFiles { margin-top: 1rem; }
+
+.extraSummary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding: 0.4rem 0;
+}
+.extraSummary:hover { color: var(--text-primary); }
 
 /* Uploads */
 .helperText {
@@ -384,14 +1056,34 @@
   margin-top: 2rem;
 }
 
+/* Sticks to the bottom of the viewport while the form is taller than
+   it. Shaving pixels only ever fixed one case type at one window size:
+   a crown with its tooth chart open runs ~95px past the fold at
+   1440×900, an aligner does not, and a 768px-tall laptop breaks both.
+   Pinning the bar means the primary action is never the thing you have
+   to go looking for. It settles into flow at the end of the form. */
 .formActionsSpaceBetween {
   display: flex;
   justify-content: space-between;
-  margin-top: 2rem;
+  align-items: center;
+  gap: 1rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 0.875rem;
+  /* Full-bleed across the form card, so it reads as a bar the content
+     passes behind. The earlier gradient faded out over the middle of
+     the instructions field, which just looked like a rendering fault. */
+  margin-left: -1.25rem;
+  margin-right: -1.25rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-surface, #131c2b);
+  border-top: 1px solid var(--glass-border);
+  box-shadow: 0 -8px 20px -8px rgba(0, 0, 0, 0.55);
 }
 
 .btnPrimary, .btnOutline {
-  padding: 0.75rem 1.5rem;
+  padding: 0.625rem 1.25rem;
   border-radius: var(--radius-pill);
   font-size: 0.875rem;
   font-weight: 600;
@@ -461,16 +1153,25 @@
 
 /* ─── Material Card Grid ─── */
 .materialGrid {
+  /* Wide enough that the tier name and its price each sit on ONE line.
+     At 96px the cards were 4-up but every one of them wrapped twice —
+     115px tall against 74px here, and with five crown SKUs it wrapped
+     to a second row regardless. Fewer, wider cards is the shorter
+     block: it is line wrapping, not column count, that costs height. */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.375rem;
 }
+
+/* The finishing options are chosen in their own block right below, so
+   repeating the availability badge on every card only adds height. */
+.premiumBadge { display: none; }
 
 .materialCard {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 1rem;
+  gap: 3px;
+  padding: 0.625rem 0.75rem;
   background: rgba(0,0,0,0.15);
   border: 1.5px solid var(--glass-border);
   border-radius: 14px;
@@ -490,18 +1191,43 @@
   box-shadow: 0 0 16px rgba(122, 156, 150, 0.15);
 }
 
+/* Category and price share one line under the name. As a stacked line
+   of its own the category was a third row on every card, and five
+   cards each shouting CERAMIC / ZIRCONIA drowned out the tier names
+   that actually distinguish them. */
+.materialMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
 .materialCategory {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
+  letter-spacing: 0.06em;
   color: var(--text-tertiary);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .materialName {
-  font-size: 0.95rem;
+  /* Sized so "Hesyra SIGNATURE" — the longest tier name — sits on one
+     line in a 151px card. At 0.95rem every card wrapped, and that one
+     wrapped line was ~19px on every card in the picker. */
+  font-size: 0.8rem;
+  letter-spacing: -0.01em;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* Says once what used to be repeated on every card. */
+.materialFootnote {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: var(--text-tertiary);
 }
 
 .premiumBadge {
@@ -514,14 +1240,14 @@
 .tierToggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  gap: 0.375rem;
 }
 
 .tierBtn {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 1.25rem;
+  gap: 2px;
+  padding: 0.5rem 0.625rem;
   background: rgba(0,0,0,0.15);
   border: 1.5px solid var(--glass-border);
   border-radius: 14px;
@@ -531,14 +1257,19 @@
 }
 
 .tierBtn strong {
-  font-size: 0.95rem;
+  font-size: 0.8125rem;
   color: var(--text-primary);
 }
 
 .tierBtn span {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.3;
+  /* One line keeps the two finish options to a compact pair. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .tierBtn:hover {
@@ -610,10 +1341,51 @@
 }
 
 /* ─── VITA Shade Swatches ─── */
+/* Collapsed to one swatch by default. Twenty swatches is the tallest
+   block on a step that had ~2px of headroom at 1440×900; the palette
+   opens from the trigger only when the doctor wants to change shade. */
+.shadeTrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.shadeTrigger:hover { border-color: var(--glass-border-strong); }
+
+.shadeTriggerSwatch {
+  display: block;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.shadeTriggerLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shadeTriggerHint {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
 .shadeGrid {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
 }
 
 .shadeSwatch {
@@ -642,8 +1414,8 @@
 
 .swatchColor {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--swatch-color);
   border: 1px solid rgba(255,255,255,0.2);

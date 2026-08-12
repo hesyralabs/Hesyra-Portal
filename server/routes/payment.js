@@ -254,6 +254,20 @@ router.post('/simulate/:caseCustomId', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Simulation not available in live mode' });
     }
 
+    // Even in test mode, only the paying clinic (or lab staff running a
+    // drill) may mark a case paid — not any authenticated account.
+    const target = await prisma.case.findUnique({
+      where: { customId: req.params.caseCustomId },
+      select: { doctorId: true },
+    });
+    if (!target) return res.status(404).json({ error: 'Case not found' });
+
+    const isOwningClinic = req.user.role === 'clinic' && target.doctorId === req.user.id;
+    const isLabStaff = ['admin', 'manager'].includes(req.user.role);
+    if (!isOwningClinic && !isLabStaff) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const mockPayment = razorpay.simulatePaymentCapture(0, req.params.caseCustomId);
     const result = await paymentEngine.handlePaymentConfirmed(req.params.caseCustomId, mockPayment.id);
 

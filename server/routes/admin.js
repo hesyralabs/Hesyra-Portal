@@ -6,7 +6,15 @@ const { logAudit, AUDIT_ACTIONS } = require('../lib/auditLogger');
 
 const router = express.Router();
 
-// All admin routes require admin role
+// ─── GET /api/admin/broadcast ──────────────────────────────────
+// Registered BEFORE the admin gate below: a broadcast is a message to
+// the whole portal, so every signed-in user has to be able to read the
+// active one. Only posting and clearing it is an admin action.
+router.get('/broadcast', authenticate, (req, res) => {
+  res.json(activeBroadcast);
+});
+
+// All other admin routes require admin role
 router.use(authenticate, requireRole('admin'));
 
 // ═══════════════════════════════════════════════════════════════════
@@ -43,7 +51,7 @@ router.post('/accounts', async (req, res) => {
     const { name, email, password, role, clinic, location, stateCode, cityCode, docSerial, dispatchPermission } = req.body;
 
     // Validate role — only known roles accepted
-    const VALID_ROLES = ['admin', 'manager', 'technician', 'cad_designer', 'dispatch', 'clinic'];
+    const VALID_ROLES = ['admin', 'manager', 'technician', 'cad_designer', 'ceramist', 'dispatch', 'clinic'];
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ success: false, message: `Invalid role: "${role}". Valid: ${VALID_ROLES.join(', ')}` });
     }
@@ -218,10 +226,7 @@ router.delete('/accounts/:id', async (req, res) => {
 // In-memory broadcast (persisted in connected clients via socket)
 let activeBroadcast = null;
 
-// ─── GET /api/admin/broadcast ──────────────────────────────────
-router.get('/broadcast', (req, res) => {
-  res.json(activeBroadcast);
-});
+// (GET /broadcast is registered above the admin gate — see top of file.)
 
 // ─── POST /api/admin/broadcast ─────────────────────────────────
 router.post('/broadcast', (req, res) => {
@@ -379,9 +384,17 @@ router.put('/payments/:caseId/manual-confirm', async (req, res) => {
 // ─── GET /api/admin/wallets ────────────────────────────────────
 router.get('/wallets', async (req, res) => {
   try {
+    // Billing terms travel with the wallet row: setting a credit line is
+    // now admin-only, and this is the only screen an admin can reach that
+    // lists clinics — /manager/clinics requires exactly the manager role.
     const wallets = await prisma.wallet.findMany({
       include: {
-        user: { select: { id: true, customId: true, name: true, clinic: true, trustLevel: true } }
+        user: {
+          select: {
+            id: true, customId: true, name: true, clinic: true, trustLevel: true, role: true,
+            billingMode: true, creditLimitPaise: true, outstandingPaise: true,
+          },
+        },
       },
       orderBy: { balancePaise: 'desc' }
     });

@@ -11,6 +11,7 @@ import DashboardLayout from './components/Layout/DashboardLayout';
 import TechLayout from './components/Layout/TechLayout';
 import ManagerLayout from './components/Layout/ManagerLayout';
 import DesignerLayout from './components/Layout/DesignerLayout';
+import CeramistLayout from './components/Layout/CeramistLayout';
 
 // Clinic Pages
 import Dashboard from './pages/Dashboard/Dashboard';
@@ -33,6 +34,7 @@ import ManagerWorkload from './pages/Manager/ManagerWorkload';
 import ManagerTickets from './pages/Manager/ManagerTickets';
 import ManagerClinics from './pages/Manager/ManagerClinics';
 import ManagerCatalog from './pages/Manager/ManagerCatalog';
+import ManagerScanDay from './pages/Manager/ManagerScanDay';
 
 // Designer Pages
 import DesignerQueue from './pages/Designer/DesignerQueue';
@@ -41,6 +43,7 @@ import DesignerPool from './pages/Designer/DesignerPool';
 
 // Ceramist Pages
 import CeramistDashboard from './pages/Ceramist/CeramistDashboard';
+import CeramistCompleted from './pages/Ceramist/CeramistCompleted';
 
 // Auth & Context
 import Login from './pages/Auth/Login';
@@ -49,7 +52,6 @@ import ResetPassword from './pages/Auth/ResetPassword';
 import Onboarding from './pages/Auth/Onboarding';
 import SuspensionScreen from './pages/Auth/SuspensionScreen';
 import { NotificationProvider } from './context/NotificationContext';
-import { ThemeProvider } from './context/ThemeContext';
 import { usePayment } from './context/PaymentContext';
 import SuperAdmin from './pages/SuperAdmin/SuperAdmin';
 
@@ -123,6 +125,7 @@ function AppRoutes() {
         <Route path="tickets" element={<ManagerTickets />} />
         <Route path="clinics" element={<ManagerClinics />} />
         <Route path="catalog" element={<ManagerCatalog />} />
+        <Route path="scan-day" element={<ManagerScanDay />} />
       </Route>
 
       {/* CAD Designer */}
@@ -168,10 +171,13 @@ function AppRoutes() {
       </Route>
 
       {/* Ceramist Routes */}
+      {/* Was TechLayout, whose sidebar points at /tech/* — routes a
+          ceramist cannot enter, so every link bounced them back here. */}
       <Route path="/ceramist" element={
-        <ProtectedRoute requiredRole="ceramist"><TechLayout /></ProtectedRoute>
+        <ProtectedRoute requiredRole="ceramist"><CeramistLayout /></ProtectedRoute>
       }>
         <Route index element={<CeramistDashboard />} />
+        <Route path="completed" element={<CeramistCompleted />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
@@ -187,12 +193,17 @@ import ErrorBoundary from './components/UI/ErrorBoundary';
 function App() {
   return (
     <ErrorBoundary>
+      {/* No ThemeProvider: the portal has one theme, defined on :root
+          in index.css. It previously carried three and a toggle that
+          could only reach two of them. */}
       <BrowserRouter>
-      <ThemeProvider>
         <ToastProvider>
-          <SystemProvider>
-            <NotificationProvider>
-              <AuthProvider>
+          <NotificationProvider>
+            <AuthProvider>
+              {/* SystemProvider sits inside AuthProvider: it loads
+                  admin-only broadcast and audit data, so it has to wait
+                  for the session before it can fetch. */}
+              <SystemProvider>
                 <CaseProvider>
                   <PaymentProvider>
                     <OnboardingProvider>
@@ -202,11 +213,10 @@ function App() {
                     </OnboardingProvider>
                   </PaymentProvider>
                 </CaseProvider>
-              </AuthProvider>
-            </NotificationProvider>
-          </SystemProvider>
+              </SystemProvider>
+            </AuthProvider>
+          </NotificationProvider>
         </ToastProvider>
-      </ThemeProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );

@@ -1,42 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Printer, Bell, Shield, Save, Droplets, Palette } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import styles from './TechSettings.module.css';
 
 const TechSettings = () => {
-  const { user, changePassword } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { user, changePassword, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [saved, setSaved] = useState(false);
 
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [passMessage, setPassMessage] = useState({ type: '', text: '' });
 
-  const handlePasswordChange = (e) => {
+  const [profile, setProfile] = useState({ name: '', phone: '' });
+  const [notifications, setNotifications] = useState({});
+
+  // Seed from the user once the session resolves — the fields used to be
+  // uncontrolled defaultValue inputs, so edits went nowhere.
+  useEffect(() => {
+    if (!user) return;
+    setProfile({ name: user.name || '', phone: user.phone || '' });
+    if (user.notificationPreferences) {
+      try { setNotifications(JSON.parse(user.notificationPreferences)); } catch { /* keep defaults */ }
+    }
+  }, [user]);
+
+  const handlePasswordChange = async (e) => {
     e.preventDefault();
     if (passwords.new !== passwords.confirm) {
       setPassMessage({ type: 'error', text: 'New passwords do not match.' });
       return;
     }
-    if (passwords.new.length < 4) {
-      setPassMessage({ type: 'error', text: 'Password must be at least 4 characters.' });
+    // Matches the minimum enforced on the clinic side and by the API.
+    if (passwords.new.length < 8) {
+      setPassMessage({ type: 'error', text: 'Password must be at least 8 characters.' });
       return;
     }
-    
-    const result = changePassword(user.email, passwords.current, passwords.new);
-    if (result.success) {
+
+    // changePassword is async — without awaiting, result was a Promise,
+    // result.success was undefined, and a successful change always
+    // reported as a failure.
+    const result = await changePassword(user.email, passwords.current, passwords.new);
+    if (result?.success) {
       setPassMessage({ type: 'success', text: 'Password updated securely.' });
       setPasswords({ current: '', new: '', confirm: '' });
     } else {
-      setPassMessage({ type: 'error', text: result.message });
+      setPassMessage({ type: 'error', text: result?.message || 'Could not update password.' });
     }
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // Persists for real. The previous handler only flashed "Saved ✓" for
+  // two seconds and wrote nothing.
+  const handleSave = async (payload) => {
+    const result = await updateProfile(payload);
+    if (result?.success) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+    return result;
   };
+
+  const saveProfile = () => handleSave(profile);
+  const saveNotifications = () => handleSave({ notificationPreferences: JSON.stringify(notifications) });
 
   return (
     <div className={styles.container}>
@@ -64,10 +88,6 @@ const TechSettings = () => {
               onClick={() => setActiveTab('notifications')}>
               <Bell size={18} /> Notifications
             </button>
-            <button className={`${styles.navItem} ${activeTab === 'preferences' ? styles.active : ''}`}
-              onClick={() => setActiveTab('preferences')}>
-              <Palette size={18} /> Preferences
-            </button>
             <button className={`${styles.navItem} ${activeTab === 'security' ? styles.active : ''}`}
               onClick={() => setActiveTab('security')}>
               <Shield size={18} /> Security
@@ -84,29 +104,26 @@ const TechSettings = () => {
                 <div className={styles.formGrid}>
                   <div className={styles.inputGroup}>
                     <label>Full Name</label>
-                    <input type="text" defaultValue={user?.name || 'Alex L.'} />
+                    <input type="text" value={profile.name}
+                      onChange={e => setProfile({ ...profile, name: e.target.value })} />
+                  </div>
+                  <div className={styles.inputGroup}>
+                    <label>Phone</label>
+                    <input type="tel" value={profile.phone}
+                      onChange={e => setProfile({ ...profile, phone: e.target.value })} />
                   </div>
                   <div className={styles.inputGroup}>
                     <label>Email</label>
-                    <input type="email" defaultValue={user?.email || 'tech@hesyra.com'} />
+                    <input type="email" value={user?.email || ''} readOnly className={styles.readonly}
+                      title="Email is the sign-in identity and cannot be changed here" />
                   </div>
                   <div className={styles.inputGroup}>
                     <label>Tech ID</label>
-                    <input type="text" defaultValue={user?.techId || 'T-001'} readOnly className={styles.readonly} />
-                  </div>
-                  <div className={styles.inputGroup}>
-                    <label>Specialization</label>
-                    <select defaultValue="general">
-                      <option value="general">General (All Case Types)</option>
-                      <option value="crowns">Crowns & Bridges</option>
-                      <option value="surgical">Surgical Guides</option>
-                      <option value="ortho">Aligners & Retainers</option>
-                      <option value="splints">Splints & Nightguards</option>
-                    </select>
+                    <input type="text" value={user?.customId || ''} readOnly className={styles.readonly} />
                   </div>
                 </div>
                 <div className={styles.formActions}>
-                  <button className={styles.btnPrimary} onClick={handleSave}>
+                  <button className={styles.btnPrimary} onClick={saveProfile}>
                     <Save size={16} /> {saved ? 'Saved ✓' : 'Save Changes'}
                   </button>
                 </div>
@@ -117,7 +134,11 @@ const TechSettings = () => {
             {activeTab === 'printers' && (
               <div className={styles.section}>
                 <h2 className={styles.sectionTitle}>3D Printer Configuration</h2>
-                <p className={styles.sectionDesc}>Add and configure the printers connected to your workstation.</p>
+                <p className={styles.sectionDesc}>
+                  Reference only. The portal is not connected to the printers — these
+                  are shown so the floor knows what the defaults are, and are not saved
+                  against your account.
+                </p>
 
                 <div className={styles.printerList}>
                   <div className={styles.printerCard}>
@@ -169,9 +190,6 @@ const TechSettings = () => {
                     </select>
                   </div>
                 </div>
-                <div className={styles.formActions}>
-                  <button className={styles.btnPrimary} onClick={handleSave}><Save size={16} /> {saved ? 'Saved ✓' : 'Save Configuration'}</button>
-                </div>
               </div>
             )}
 
@@ -212,41 +230,22 @@ const TechSettings = () => {
                 <h2 className={styles.sectionTitle}>Alerts & Notifications</h2>
                 <p className={styles.sectionDesc}>Manage how you receive updates about your workstation assignments.</p>
                 <div style={{display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px'}}>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" defaultChecked /> Push notification for new "Unassigned" cases
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" defaultChecked /> Alert me when a Doctor replies in chat
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" defaultChecked /> Alert me when Doctor approves a digital design
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" defaultChecked /> Low Resin Inventory Warnings (below 20%)
-                  </label>
+                  {[
+                    { key: 'unassignedCases', label: 'New unassigned case enters the pool' },
+                    { key: 'doctorReply',     label: 'A doctor replies in case chat' },
+                    { key: 'designApproved',  label: 'A doctor approves a digital design' },
+                  ].map(row => (
+                    <label key={row.key}
+                      style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
+                      <input type="checkbox"
+                        checked={notifications[row.key] !== false}
+                        onChange={e => setNotifications({ ...notifications, [row.key]: e.target.checked })} />
+                      {row.label}
+                    </label>
+                  ))}
                 </div>
                 <div className={styles.formActions} style={{marginTop: '24px'}}>
-                  <button className={styles.btnPrimary} onClick={handleSave}><Save size={16} /> {saved ? 'Saved ✓' : 'Save Preferences'}</button>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'preferences' && (
-              <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>App Preferences</h2>
-                <div className={styles.formGrid}>
-                  <div className={styles.inputGroupFull}>
-                    <label>UI Theme</label>
-                    <select 
-                      value={theme} 
-                      onChange={(e) => { setTheme(e.target.value); handleSave(); }}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
-                    >
-                      <option value="brand">Brand Mode (Hesyra Default)</option>
-                      <option value="dark">Dark Mode (High Contrast)</option>
-                      <option value="light">Light Mode (Daytime)</option>
-                    </select>
-                  </div>
+                  <button className={styles.btnPrimary} onClick={saveNotifications}><Save size={16} /> {saved ? 'Saved ✓' : 'Save Preferences'}</button>
                 </div>
               </div>
             )}

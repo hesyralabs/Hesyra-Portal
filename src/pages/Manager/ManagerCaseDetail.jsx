@@ -15,6 +15,7 @@ const STATUS_CONFIG = {
   cad_assigned:       { label: 'CAD Assigned',        color: '#a78bfa' },
   blocked:            { label: 'Blocked',              color: '#ef4444' },
   design_ready:       { label: 'Design Ready',        color: '#34d399' },
+  awaiting_doctor_approval: { label: 'With Doctor',    color: '#f0abfc' },
   design_revision:    { label: 'Revision Requested',  color: '#fb923c' },
   design_approved:    { label: 'Design Approved',     color: '#34d399' },
   post_processing:    { label: 'Post-Processing',     color: '#fcd34d' },
@@ -264,26 +265,34 @@ const ManagerCaseDetail = () => {
                   <Cpu size={15} /> Assign to CAD
                 </button>
               )}
-              {/* design_ready → approve or revise */}
+              {/* design_ready → lab QC passes, design goes to the doctor */}
               {c.status === 'design_ready' && (<>
                 {c.assignedTechId ? (
                   <button className={styles.actionSuccess} onClick={() => designAction('approve')} disabled={savingAction}>
-                    <CheckCircle size={15} /> Approve Design
+                    <CheckCircle size={15} /> Pass QC — Send to Doctor
                   </button>
                 ) : (
                   <button
                     className={styles.actionSuccess}
                     style={{ opacity: 0.6, cursor: 'not-allowed' }}
                     onClick={() => showToast('Please assign a technician to the case first')}
-                    title="A technician must be assigned before design approval"
+                    title="A technician must be assigned before the design goes to the doctor"
                   >
-                    <CheckCircle size={15} /> Approve Design (Tech Required)
+                    <CheckCircle size={15} /> Pass QC (Tech Required)
                   </button>
                 )}
                 <button className={styles.actionWarn} onClick={() => setRevisionModal(true)} disabled={savingAction}>
                   <RotateCcw size={15} /> Request Revision
                 </button>
               </>)}
+              {/* awaiting_doctor_approval → the lab waits; manager can only chase */}
+              {c.status === 'awaiting_doctor_approval' && (
+                <div className={styles.actionNote} style={{ fontSize: '13px', lineHeight: 1.5, opacity: 0.85 }}>
+                  Waiting on {c.doctor || 'the ordering doctor'} to approve this design
+                  {c.doctorApprovalDueAt && <> — due {new Date(c.doctorApprovalDueAt).toLocaleString('en-IN')}</>}.
+                  {' '}It resolves automatically at the deadline.
+                </div>
+              )}
               {/* design_approved → post processing */}
               {c.status === 'design_approved' && (
                 c.assignedTechId ? (

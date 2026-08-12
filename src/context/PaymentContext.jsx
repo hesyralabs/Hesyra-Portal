@@ -14,7 +14,7 @@ export const PaymentProvider = ({ children }) => {
 
   // ─── Fetch wallet balance ───────────────────────────────
   const refreshWallet = useCallback(async () => {
-    if (!user || user.role !== 'dentist') return;
+    if (!user || user.role !== 'clinic') return;
     try {
       setWalletLoading(true);
       const data = await walletAPI.getBalance();
@@ -28,7 +28,7 @@ export const PaymentProvider = ({ children }) => {
 
   // ─── Fetch trust/strike status ──────────────────────────
   const refreshTrustStatus = useCallback(async () => {
-    if (!user || user.role !== 'dentist') return;
+    if (!user || user.role !== 'clinic') return;
     try {
       const data = await strikesAPI.getMyStatus();
       setTrustStatus(data);
@@ -39,7 +39,7 @@ export const PaymentProvider = ({ children }) => {
 
   // Load on mount for dentists
   useEffect(() => {
-    if (user?.role === 'dentist') {
+    if (user?.role === 'clinic') {
       refreshWallet();
       refreshTrustStatus();
     }
@@ -48,7 +48,7 @@ export const PaymentProvider = ({ children }) => {
   // ─── Real-time wallet updates via Socket.io ─────────────────
   useEffect(() => {
     const socket = window.__hesyraSocket;
-    if (!socket || user?.role !== 'dentist') return;
+    if (!socket || user?.role !== 'clinic') return;
 
     const handleWalletUpdate = (data) => {
       // Only refresh if the event targets this user (or is a broadcast)

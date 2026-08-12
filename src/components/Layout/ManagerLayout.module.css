@@ -206,13 +206,6 @@
   padding: 2.5rem 3rem;
 }
 
-/* ─── Light Mode ─── */
-:global(.light-mode) .sidebar { background: #fff; box-shadow: 10px 0 30px rgba(0,26,51,0.03); }
-:global(.light-mode) .brandMain { color: var(--brand-azure); }
-:global(.light-mode) .brandSub { color: #d97706; }
-:global(.light-mode) .navItem.active { background: rgba(245, 158, 11, 0.08); color: #d97706; }
-:global(.light-mode) .profileName { color: var(--text-primary); }
-
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
   .sidebar { width: 100%; min-width: 100%; height: auto; padding: 1rem; border-right: none; border-bottom: 1px solid var(--glass-border); }

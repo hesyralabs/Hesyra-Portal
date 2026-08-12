@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { casesAPI, invoicesAPI } from '../utils/api';
 import { useToasts } from './ToastContext';
+import { useAuth } from './AuthContext';
 
 const CaseContext = createContext(null);
 
@@ -25,13 +26,14 @@ const VALID_TRANSITIONS = {
   // CAD workflow
   cad_assigned:        ['design_ready', 'blocked', 'cancelled'],
   blocked:             ['cad_assigned', 'cancelled'],
-  design_ready:        ['design_approved', 'design_revision', 'cancelled'],
+  design_ready:        ['awaiting_doctor_approval', 'design_revision', 'cancelled'],
+  awaiting_doctor_approval: ['design_approved', 'design_revision', 'cancelled'],
   design_revision:     ['design_ready', 'cancelled'],
   design_approved:     ['batched', 'post_processing', 'cancelled'],
   // Batch production
   batched:             ['printing', 'design_approved', 'cancelled'],
   printing:            ['printed', 'qa', 'post_processing', 'cancelled'],
-  printed:             ['finishing', 'cancelled'],
+  printed:             ['finishing', 'qa', 'cancelled'],
   finishing:           ['qa', 'cancelled'],
   // Legacy production (technician)
   post_processing:     ['qa', 'cad_assigned', 'cancelled'],
@@ -60,6 +62,7 @@ const STATUS_LABELS = {
   cad_assigned:        'CAD Assigned',
   blocked:             'Blocked — Scan Issue',
   design_ready:        'Design Ready for Review',
+  awaiting_doctor_approval: 'Awaiting Your Approval',
   design_revision:     'Revision Requested',
   design_approved:     'Design Approved',
   // Batch production
@@ -90,6 +93,7 @@ const STATUS_LABELS = {
 // ═══════════════════════════════════════════════════════════════════
 export const CaseProvider = ({ children }) => {
   const { addToast } = useToasts();
+  const { user } = useAuth();
   const [cases, setCases] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,26 +119,60 @@ export const CaseProvider = ({ children }) => {
     }
   }, []);
 
+  // Both endpoints require a JWT, so this must wait for the session to
+  // resolve — fetching on mount alone races the login and leaves the app
+  // showing an empty dataset until a manual page reload.
+  const userId = user?.id;
+
   useEffect(() => {
+    if (!userId) {
+      // Logged out (or session not restored yet) — drop the previous
+      // user's data so the next login never sees another role's cases.
+      setCases([]);
+      setInvoices([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     Promise.all([refreshCases(), refreshInvoices()])
       .finally(() => setLoading(false));
-  }, [refreshCases, refreshInvoices]);
+  }, [userId, refreshCases, refreshInvoices]);
 
   // ─── Socket.io real-time updates ───────────────────────────
   useEffect(() => {
     // Dynamic import to avoid issues when socket.io-client isn't loaded
     let socket = null;
+
+    // The alert toggles in Settings gate these. Statuses are mapped to
+    // the same four preferences the user actually sees, so switching one
+    // off genuinely stops the alert rather than just storing a flag.
+    const prefs = (() => {
+      try { return JSON.parse(user?.notificationPreferences || '{}'); }
+      catch { return {}; }
+    })();
+    const wants = (key) => prefs[key] !== false; // default on
+    const PREF_FOR_STATUS = {
+      action_required: 'actionRequired',
+      awaiting_doctor_approval: 'designApproval',
+      design_ready: 'designApproval',
+      dispatched: 'caseShipped',
+      shipped: 'caseShipped',
+    };
+
     try {
       const io = window.__hesyraSocket;
       if (io) {
         socket = io;
-        socket.on('case:created', (data) => { 
-          refreshCases(); 
-          addToast(data?.customId ? `New case received: ${data.customId}` : 'New case received!', 'info'); 
+        socket.on('case:created', (data) => {
+          refreshCases();
+          addToast(data?.customId ? `New case received: ${data.customId}` : 'New case received!', 'info');
         });
-        socket.on('case:updated', (data) => { 
+        socket.on('case:updated', (data) => {
           refreshCases();
           if (data && data.customId && data.newStatus) {
+            const prefKey = PREF_FOR_STATUS[data.newStatus];
+            if (prefKey && !wants(prefKey)) return; // muted in Settings
             addToast(`Case ${data.customId} is now ${STATUS_LABELS[data.newStatus] || data.newStatus}`, 'info');
           }
         });
@@ -143,7 +181,10 @@ export const CaseProvider = ({ children }) => {
           refreshCases(); 
           addToast(data?.customId ? `New message in case ${data.customId}` : 'New message in case chat', 'info'); 
         });
-        socket.on('invoice:created', () => refreshInvoices());
+        socket.on('invoice:created', () => {
+          refreshInvoices();
+          if (wants('invoiceGenerated')) addToast('A new invoice is available.', 'info');
+        });
         socket.on('invoice:updated', () => refreshInvoices());
         socket.on('invoice:deleted', () => refreshInvoices());
         socket.on('payment:confirmed', (data) => {
@@ -166,7 +207,9 @@ export const CaseProvider = ({ children }) => {
         socket.off('payment:confirmed');
       }
     };
-  }, [refreshCases, refreshInvoices, addToast]);
+    // Re-bind when the alert preferences change so a toggle takes
+    // effect immediately, without a reload.
+  }, [refreshCases, refreshInvoices, addToast, user?.notificationPreferences]);
 
   // ─── Validate Transition (client-side preview) ─────────────
   const isValidTransition = useCallback((fromStatus, toStatus) => {
@@ -236,6 +279,20 @@ export const CaseProvider = ({ children }) => {
         materialSkuId: formData.materialSkuId || null,
         finishingTier: formData.finishingTier || 'standard',
         specificType: formData.specificType || null,
+        // Category-specific pricing inputs — the server prices the case
+        // from these, so they must not be dropped here.
+        // For guides the implant count IS the number of sites marked on
+        // the arch — there is no separate field to fall out of step.
+        implantCount: formData.caseType === 'surgical_guide'
+          ? (formData.toothNumbers?.length || null)
+          : (formData.implantCount ? Number(formData.implantCount) : null),
+        virtualSurgicalPlan: !!formData.virtualSurgicalPlan,
+        alignerTier: formData.alignerTier || null,
+        extraAlignerSets: Number(formData.extraAlignerSets) || 0,
+        // Scan Day: redeeming a complimentary crown zeroes the case
+        // price, so the server treats this one as non-best-effort.
+        useCrownCredit: !!formData.useCrownCredit,
+        crownCreditId: formData.crownCreditId || null,
         // Note: files are uploaded separately via multipart POST /:customId/upload
       });
 
@@ -345,21 +402,33 @@ export const CaseProvider = ({ children }) => {
   }, [transitionCaseStatus]);
 
   // ─── Doctor Approves Design ───────────────────────────────
-  const approveDesign = useCallback((id) => {
-    return transitionCaseStatus(id, 'printing', {
-      timelineLabel: 'Doctor Approved — Printing Started',
-      clearRejection: true,
-    });
-  }, [transitionCaseStatus]);
+  // Goes through the dedicated approval endpoint, which records WHO
+  // approved and when — the generic status route deliberately refuses
+  // production transitions from a clinic account.
+  const approveDesign = useCallback(async (id) => {
+    try {
+      await casesAPI.designApproval(id, 'approve');
+      await refreshCases();
+      addToast('Design approved — the lab can start production.', 'success');
+      return true;
+    } catch (err) {
+      addToast(err.message || 'Could not approve the design', 'error');
+      return false;
+    }
+  }, [refreshCases, addToast]);
 
   // ─── Doctor Requests Changes ──────────────────────────────
-  const requestDesignChanges = useCallback((id, reason) => {
-    return transitionCaseStatus(id, 'designing', {
-      timelineLabel: 'Doctor Requested Design Changes',
-      timelineInfo: reason,
-      rejectionReason: reason,
-    });
-  }, [transitionCaseStatus]);
+  const requestDesignChanges = useCallback(async (id, reason) => {
+    try {
+      await casesAPI.designApproval(id, 'revise', reason);
+      await refreshCases();
+      addToast('Sent back to the design team.', 'info');
+      return true;
+    } catch (err) {
+      addToast(err.message || 'Could not send the design back', 'error');
+      return false;
+    }
+  }, [refreshCases, addToast]);
 
   // ─── Send to Printer / Post-Processing ───────────────────────
   const sendToPrinter = useCallback((id) => {

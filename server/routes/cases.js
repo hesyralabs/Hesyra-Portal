@@ -7,6 +7,8 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { logAudit, AUDIT_ACTIONS } = require('../lib/auditLogger');
 const paymentEngine = require('../lib/paymentEngine');
 const paymentConfig = require('../lib/config');
+const pricing = require('../lib/pricing');
+const scanDay = require('../lib/scanDay');
 const { updateDesignerStats, incrementActiveCount } = require('../lib/assignmentEngine');
 
 const router = express.Router();
@@ -41,7 +43,25 @@ function blindCaseData(c, role) {
     // Tracking
     trackingCourier:  c.trackingCourier,
     trackingNumber:   c.trackingNumber,
+    packagedAt:       c.packagedAt,
+    dispatchedAt:     c.dispatchedAt,
     rejectionReason:  c.rejectionReason,
+    // The detail page rendered "Submitted on ·" with a blank date
+    // because neither of these was ever sent.
+    received:         c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null,
+    createdAt:        c.createdAt,
+    warrantyYears:    c.warrantyYears,
+    totalAmountPaise: c.totalAmountPaise,
+    // A Scan Day crown bills at zero. Without this the case detail
+    // page just shows no price at all, which reads as missing data
+    // rather than as the complimentary crown the clinic earned.
+    complimentary:    c.complimentary,
+    // Doctor design approval — every role needs the deadline visible so
+    // the lab can see what it is waiting on, not just the doctor.
+    doctorApprovalSentAt: c.doctorApprovalSentAt,
+    doctorApprovalDueAt:  c.doctorApprovalDueAt,
+    doctorApprovedAt:     c.doctorApprovedAt,
+    doctorApprovalMethod: c.doctorApprovalMethod,
     // Relations
     files:            (c.files || []).map(f => ({
       id:         f.id,
@@ -58,12 +78,23 @@ function blindCaseData(c, role) {
       text: m.text,
       time: new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
     })),
-    timeline:         (c.timeline || []).map(t => ({
-      label: t.label,
-      time:  new Date(t.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      info:  t.info || undefined,
-      done:  true,
-    })),
+    timeline:         (c.timeline || []).map(t => {
+      const at = new Date(t.createdAt);
+      const today = new Date();
+      const sameDay = at.toDateString() === today.toDateString();
+      return {
+        label: t.label,
+        // A bare time is useless the moment a case is more than a day
+        // old — show the date too, unless it happened today.
+        time: sameDay
+          ? at.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+          : at.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+            + ' · ' + at.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }),
+        at: t.createdAt,
+        info: t.info || undefined,
+        done: true,
+      };
+    }),
   };
 
   // ── Role-specific field exposure ──────────────────────────────
@@ -247,14 +278,19 @@ const VALID_TRANSITIONS = {
   // ─ CAD workflow ─
   cad_assigned:      ['design_ready', 'blocked', 'cancelled'],
   blocked:           ['cad_assigned', 'cancelled'],
-  design_ready:      ['design_approved', 'design_revision', 'cancelled'],
+  // Lab QC passes the design, then the ordering doctor signs off on it.
+  design_ready:      ['awaiting_doctor_approval', 'design_revision', 'cancelled'],
+  awaiting_doctor_approval: ['design_approved', 'design_revision', 'cancelled'],
   design_revision:   ['design_ready', 'cancelled'],
   design_approved:   ['batched', 'post_processing', 'cancelled'],   // batched = new batch flow, post_processing = legacy
 
   // ─ Batch Production (new flow) ─
   batched:           ['printing', 'design_approved', 'cancelled'],  // printing via batch start; back to design_approved if removed
   // 'printing' status is set by batch.js when the batch starts printing
-  printed:           ['finishing', 'cancelled'],                     // finishing = ceramist assigned
+  // Premium (Signature Match) work goes to a ceramist; standard (Studio
+  // Finish) has no ceramic stage, so it goes straight to QC rather than
+  // queueing for a ceramist who has nothing to do.
+  printed:           ['finishing', 'qa', 'cancelled'],
   finishing:         ['qa', 'cancelled'],                            // ceramist done → QC
 
   // ─ Legacy Production (still valid for non-batched cases) ─
@@ -262,9 +298,12 @@ const VALID_TRANSITIONS = {
   qa:                ['ready_for_dispatch', 'post_processing', 'cancelled'],
 
   // ─ Dispatch & payment ─
+  // Payment lands the case back on ready_for_dispatch — paid, waiting to
+  // be physically packed. Nothing goes straight to packaged: somebody has
+  // to actually put it in a box.
   ready_for_dispatch:['packaged', 'payment_pending', 'cancelled'],
-  payment_pending:   ['packaged', 'overdue', 'cancelled'],
-  overdue:           ['packaged', 'payment_pending', 'cancelled'],
+  payment_pending:   ['ready_for_dispatch', 'overdue', 'cancelled'],
+  overdue:           ['ready_for_dispatch', 'payment_pending', 'cancelled'],
   packaged:          ['dispatched', 'cancelled'],
   dispatched:        ['completed', 'archived'],
 
@@ -280,6 +319,49 @@ const VALID_TRANSITIONS = {
   shipped:           ['completed', 'archived'],
 };
 
+// ─── Who may drive a case INTO each status ─────────────────────
+// The state machine says which moves are legal; this says who is allowed
+// to make them. Production states belong to lab staff — a clinic may only
+// submit, cancel, or confirm delivery of a case it owns.
+const TRANSITION_ROLES = {
+  draft:              ['clinic', 'manager', 'admin'],
+  submitted:          ['clinic', 'manager', 'admin'],
+  action_required:    ['cad_designer', 'technician', 'manager', 'admin'],
+  cancelled:          ['clinic', 'manager', 'admin'],
+
+  cad_assigned:       ['manager', 'admin'],
+  blocked:            ['cad_designer', 'manager', 'admin'],
+  design_ready:       ['cad_designer', 'manager', 'admin'],
+  // Sent to the doctor by the manager after lab QC.
+  awaiting_doctor_approval: ['manager', 'admin'],
+  // The doctor requests changes; manager may also do it on their behalf.
+  design_revision:    ['clinic', 'manager', 'admin'],
+  // Clinical sign-off belongs to the ordering doctor. Manager/admin retain
+  // it for the escalation path when a doctor never responds.
+  design_approved:    ['clinic', 'manager', 'admin'],
+
+  batched:            ['technician', 'manager', 'admin'],
+  printing:           ['technician', 'manager', 'admin'],
+  printed:            ['technician', 'manager', 'admin'],
+  finishing:          ['technician', 'ceramist', 'manager', 'admin'],
+  post_processing:    ['technician', 'manager', 'admin'],
+  qa:                 ['technician', 'ceramist', 'manager', 'admin'],
+
+  ready_for_dispatch: ['technician', 'manager', 'admin'],
+  payment_pending:    ['manager', 'admin'],
+  overdue:            ['manager', 'admin'],
+  packaged:           ['technician', 'dispatch', 'manager', 'admin'],
+  dispatched:         ['technician', 'dispatch', 'manager', 'admin'],
+  shipped:            ['technician', 'dispatch', 'manager', 'admin'],
+
+  completed:          ['clinic', 'dispatch', 'manager', 'admin'],
+  archived:           ['manager', 'admin'],
+};
+
+// Statuses that physically hand the prosthesis over. None may be reached
+// until the case is paid for, or was knowingly dispatched on Net-30 credit.
+const DISPATCH_STATUSES = ['packaged', 'dispatched', 'shipped'];
+
 const STATUS_LABELS = {
   draft:              'Draft',
   submitted:          'Submitted',
@@ -287,6 +369,7 @@ const STATUS_LABELS = {
   cad_assigned:       'CAD Assigned',
   blocked:            'Blocked — Scan Issue',
   design_ready:       'Design Ready for Review',
+  awaiting_doctor_approval: 'Awaiting Your Approval',
   design_revision:    'Revision Requested',
   design_approved:    'Design Approved',
   // Batch production
@@ -515,50 +598,45 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     // ─── Parse tooth count ─────────────────────────────────────
-    let toothCount = 1;
-    if (caseType === 'crown_bridge') {
-      let teeth = [];
-      if (typeof toothNumbers === 'string') {
-        try { teeth = JSON.parse(toothNumbers); } catch { teeth = []; }
-      } else if (Array.isArray(toothNumbers)) {
-        teeth = toothNumbers;
+    // Needed by crowns/bridges, inlays and veneers alike, so it is
+    // parsed for every case type rather than crowns only.
+    let teeth = [];
+    if (typeof toothNumbers === 'string') {
+      try { teeth = JSON.parse(toothNumbers); } catch { teeth = []; }
+    } else if (Array.isArray(toothNumbers)) {
+      teeth = toothNumbers;
+    }
+    const toothCount = teeth.length > 0 ? teeth.length : 1;
+
+    // ─── Price the case ────────────────────────────────────────
+    // All category rules (aligner tiers, per-implant guides, veneer
+    // base cases, Signature Match) live in lib/pricing.js, which also
+    // applies GST @5% on top of the published net prices.
+    let quote;
+    try {
+      quote = pricing.quoteCase({
+        caseType,
+        sku: skuRecord,
+        toothCount,
+        archTarget,
+        implantCount:        req.body.implantCount,
+        virtualSurgicalPlan: !!req.body.virtualSurgicalPlan,
+        alignerTier:         req.body.alignerTier,
+        extraAlignerSets:    req.body.extraAlignerSets,
+        specificType,
+        finishingTier,
+      });
+    } catch (err) {
+      if (err instanceof pricing.PricingError) {
+        return res.status(400).json({ error: err.message, ...err.details });
       }
-      toothCount = teeth.length > 0 ? teeth.length : 1;
+      throw err;
     }
 
-    // ─── Calculate order amount ────────────────────────────────
-    let totalAmountPaise;
-    if (skuRecord && skuRecord.basePrice) {
-      // SKU-aware base pricing
-      totalAmountPaise = (caseType === 'crown_bridge')
-        ? skuRecord.basePrice * toothCount
-        : skuRecord.basePrice;
-
-      // ─── Signature Match upcharge (per case type) ────────────
-      if (finishingTier === 'premium' && skuRecord.premiumUpcharge) {
-        if (caseType === 'crown_bridge') {
-          // Crown vs Bridge distinction:
-          //   Single Crown      → flat upcharge (premiumUpcharge flat)
-          //   Multi-Unit Bridge → per-tooth upcharge scaled proportionally
-          const isBridge = specificType === 'Multi-Unit Bridge';
-          if (isBridge) {
-            // Bridge rate: ₹120/tooth (12000 paise) default.
-            // Scaled dynamically if admin changes the base SKU premiumUpcharge (₹199 default)
-            const bridgeRatePaise = Math.round(skuRecord.premiumUpcharge * (120 / 199));
-            totalAmountPaise += bridgeRatePaise * toothCount;
-          } else {
-            // Single Crown: flat upcharge (₹199 / 19900 paise default)
-            totalAmountPaise += skuRecord.premiumUpcharge;
-          }
-        } else {
-          // Veneers (₹500 / 50000 paise), Dentures (₹500 / 50000 paise), etc. — flat upcharge per case
-          totalAmountPaise += skuRecord.premiumUpcharge;
-        }
-      }
-    } else {
-      // Fallback to flat config pricing (legacy / no SKU selected)
-      totalAmountPaise = paymentEngine.calculateOrderAmount(caseType || 'draft', toothNumbers || []);
-    }
+    const netAmountPaise = quote.netPaise;
+    const gstAmountPaise = quote.gstPaise;
+    // Not const — a redeemed Scan Day credit zeroes this below.
+    let totalAmountPaise = quote.totalPaise;
 
     let displayType = reqType || (caseType || 'Draft').replace('_', ' & ').toUpperCase();
 
@@ -575,7 +653,9 @@ router.post('/', authenticate, async (req, res) => {
         implantSystem: implantSystem || '',
         instructions: instructions || '',
         status: initialStatus,
-        clinic: req.body.clinic || 'Your Clinic',
+        // Derive from the doctor record — this name ends up on the GST
+        // invoice, so it must not depend on a client-supplied value.
+        clinic: doctor?.clinic || req.body.clinic || 'Unknown Clinic',
         due: 'TBD',
         doctorId: doctorId,
         totalAmountPaise,
@@ -583,6 +663,14 @@ router.post('/', authenticate, async (req, res) => {
         // ─── SKU Catalog fields ──────────────────────
         materialSkuId: resolvedMaterialSkuId,
         finishingTier: finishingTier || 'standard',
+        // ─── Category-specific pricing inputs ────────
+        implantCount:        req.body.implantCount != null ? Number(req.body.implantCount) : null,
+        virtualSurgicalPlan: !!req.body.virtualSurgicalPlan,
+        alignerTier:         req.body.alignerTier || null,
+        extraAlignerSets:    Number(req.body.extraAlignerSets) || 0,
+        // Snapshot the warranty sold with this tier — the published
+        // term may change, but this case is owed what it was sold.
+        warrantyYears:       skuRecord?.warrantyYears ?? null,
       },
       include: { doctor: { select: { id: true, name: true, clinic: true, trustLevel: true } }, timeline: true, messages: true },
     });
@@ -621,11 +709,70 @@ router.post('/', authenticate, async (req, res) => {
       io.emit('pool:new_case', { customId: newCase.customId, caseType: caseType });
     }
 
+    // ─── Scan Day launch offer ────────────────────────────────
+    // A crown order inside an open scan-visit window may earn the
+    // clinic complimentary crowns. Best-effort: never fail the order
+    // because the reward bookkeeping had a problem.
+    let scanDayReward = null;
+    if (!isDraft) {
+      // Redemption changes what the clinic is charged, so it is NOT
+      // best-effort — a failure here must surface, not be swallowed.
+      if (req.body.useCrownCredit) {
+        const used = await scanDay.redeemCreditFor(newCase, req.body.crownCreditId);
+        if (used) {
+          scanDayReward = { redeemed: true, credit: used };
+          totalAmountPaise = 0;
+        }
+      }
+
+      // Earning credits is bookkeeping — never fail an order over it.
+      try {
+        const { visit, newCredits } = await scanDay.registerCrownOrder(newCase);
+        if (newCredits.length) {
+          scanDayReward = { ...(scanDayReward || {}), earned: newCredits.length, visitId: visit?.customId };
+          await prisma.timeline.create({
+            data: {
+              caseId: newCase.id,
+              label: `🎁 Scan Day reward — ${newCredits.length} complimentary crown${newCredits.length > 1 ? 's' : ''} earned`,
+              info: newCredits[0].reason,
+            },
+          });
+        }
+      } catch (offerErr) {
+        console.error('Scan Day offer processing failed:', offerErr.message);
+      }
+    }
+
+    // The opening entry of the case's record.
+    await logAudit({
+      req,
+      action:     AUDIT_ACTIONS.CASE_CREATED,
+      entityType: 'case',
+      entityId:   newCase.id,
+      afterState: {
+        customId: newCase.customId,
+        caseType: newCase.caseType,
+        status:   newCase.status,
+        totalAmountPaise,
+      },
+      reason:     isDraft ? 'Draft created' : 'Prescription submitted',
+      metadata:   { customId: newCase.customId, clinic: newCase.clinic },
+    });
+
     res.status(201).json({
       success: true,
       id: newCase.customId,
       totalAmountPaise,
       totalAmountINR: paymentConfig.paiseToINR(totalAmountPaise),
+      // Itemised so the clinic can see exactly how the figure was built.
+      pricing: {
+        lines: quote.lines,
+        netPaise: netAmountPaise,
+        gstPaise: gstAmountPaise,
+        gstRate: quote.gstRate,
+      },
+      warrantyYears: newCase.warrantyYears,
+      scanDayReward,
       depositRequired,
       depositResult,
     });
@@ -653,6 +800,25 @@ router.put('/:customId/status', authenticate, async (req, res) => {
       }
     }
 
+    // ─── Authorization ────────────────────────────────────────
+    // A clinic may only ever touch its own case, whatever the move.
+    if (req.user.role === 'clinic' && c.doctorId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!force) {
+      const allowedRoles = TRANSITION_ROLES[newStatus];
+      if (!allowedRoles) {
+        return res.status(400).json({ error: `Unknown target status: ${newStatus}` });
+      }
+      if (!allowedRoles.includes(req.user.role)) {
+        return res.status(403).json({
+          error: `Your role cannot move a case to "${newStatus}"`,
+          yourRole: req.user.role,
+        });
+      }
+    }
+
     // State machine validation
     if (!force && !isValidTransition(c.status, newStatus)) {
       return res.status(400).json({
@@ -676,7 +842,41 @@ router.put('/:customId/status', authenticate, async (req, res) => {
       });
     }
 
+    // ─── Hard Rule: no hand-over without payment ──────────────
+    // Checked BEFORE the write. Covers the whole dispatch group, not just
+    // the legacy 'shipped' status — packaged/dispatched are the states the
+    // batch-era flow actually uses, and they were previously ungated.
+    if (!force && DISPATCH_STATUSES.includes(newStatus)) {
+      if (!c.paymentConfirmedAt && !c.dispatchedOnCredit) {
+        return res.status(400).json({
+          error: 'Cannot dispatch without confirmed payment',
+          caseStatus: c.status,
+          amountDuePaise: (c.totalAmountPaise || 0) - (c.depositPaidPaise || 0),
+        });
+      }
+    }
+
+    // ─── Dispatch requires a real hand-over record ────────────
+    // A courier and consignment number are what let the clinic chase a
+    // parcel, and they are the only proof the lab actually sent it.
+    if (!force && (newStatus === 'dispatched' || newStatus === 'shipped')) {
+      const courier = tracking?.courier || c.trackingCourier;
+      const number  = tracking?.number  || c.trackingNumber;
+      if (!courier || !number) {
+        return res.status(400).json({
+          error: 'Enter the courier and consignment number before dispatching.',
+        });
+      }
+    }
+
     const updateData = { status: newStatus };
+
+    if (newStatus === 'packaged') {
+      updateData.packagedAt = c.packagedAt || new Date();
+    }
+    if (newStatus === 'dispatched' || newStatus === 'shipped') {
+      updateData.dispatchedAt = c.dispatchedAt || new Date();
+    }
 
     if (rejectionReason) updateData.rejectionReason = rejectionReason;
     if (newStatus === 'submitted' && c.status === 'action_required') updateData.rejectionReason = null;
@@ -704,16 +904,18 @@ router.put('/:customId/status', authenticate, async (req, res) => {
     if (newStatus === 'ready_for_dispatch') {
       try {
         const paymentResult = await paymentEngine.processReadyForDispatch(c.id);
-        // If wallet auto-deducted, case is already at 'shipped'
-        if (paymentResult.mode === 'wallet_auto') {
+        // Wallet/credit settle immediately — the case stays on
+        // ready_for_dispatch, paid and waiting to be packed.
+        if (paymentResult.mode === 'wallet_auto' || paymentResult.mode === 'credit') {
           const io2 = req.app.get('io');
           if (io2) {
             io2.emit('payment:confirmed', { caseId: c.customId });
             io2.emit('invoice:created', {});
-            io2.emit('wallet:updated', { userId: c.userId });
+            io2.emit('wallet:updated', { userId: c.doctorId });
           }
-          finalReturnedStatus = 'shipped';
-          return res.json({ success: true, paymentResult, finalStatus: finalReturnedStatus });
+          return res.json({ success: true, paymentResult, finalStatus: 'ready_for_dispatch' });
+        } else if (paymentResult.mode === 'credit_blocked') {
+          finalReturnedStatus = 'ready_for_dispatch';
         } else {
           finalReturnedStatus = 'payment_pending';
         }
@@ -723,13 +925,9 @@ router.put('/:customId/status', authenticate, async (req, res) => {
       }
     }
 
-    // ─── Hard Rule: Block dispatch without payment ────────────
-    if (newStatus === 'shipped' && !force) {
-      const caseCheck = await prisma.case.findUnique({ where: { id: c.id } });
-      if (!caseCheck.paymentConfirmedAt && req.user.role !== 'admin') {
-        return res.status(400).json({ error: 'Cannot dispatch without confirmed payment' });
-      }
-    }
+    // (The dispatch payment gate now runs before the write, above — it
+    // used to sit here, after the case had already been updated, and only
+    // matched the legacy 'shipped' status.)
 
     // ─── Handle Cancellation/Rejection Refunds ────────────────
     if (newStatus === 'cancelled') {
@@ -744,18 +942,25 @@ router.put('/:customId/status', authenticate, async (req, res) => {
       }
     }
 
-    // Write audit entry for force overrides
-    if (force) {
-      await logAudit({
-        req,
-        action:     AUDIT_ACTIONS.CASE_STATE_FORCE,
-        entityType: 'case',
-        entityId:   c.id,
-        beforeState:{ status: c.status },
-        afterState: { status: newStatus },
-        reason:     reason || '',
-      });
-    }
+    // ─── Audit EVERY transition, not just the forced ones ──────
+    // A case has to be reconstructable long after it closes: who moved
+    // it, from what to what, when, and from where. The Timeline entry
+    // above is the clinic-facing story and carries no actor at all.
+    await logAudit({
+      req,
+      action:     force ? AUDIT_ACTIONS.CASE_STATE_FORCE : AUDIT_ACTIONS.CASE_STATUS_CHANGE,
+      entityType: 'case',
+      entityId:   c.id,
+      beforeState:{ status: c.status },
+      afterState: { status: newStatus },
+      reason:     reason || (force ? '' : `${c.status} → ${newStatus}`),
+      metadata:   {
+        customId: c.customId,
+        forced: !!force,
+        ...(tracking ? { courier: tracking.courier, consignment: tracking.number } : {}),
+        ...(rejectionReason ? { rejectionReason } : {}),
+      },
+    });
 
     // ─── Update designer stats on key milestones ───────────────────
     // Trigger recalculation when design work completes or is revised
@@ -784,12 +989,92 @@ router.put('/:customId/status', authenticate, async (req, res) => {
   }
 });
 
+// ─── PUT /api/cases/:customId/design-approval ─────────────────
+// The ordering doctor signs off on the CAD design, or sends it back.
+// Body: { action: 'approve' | 'revise', reason? }
+router.put('/:customId/design-approval', authenticate, requireRole('clinic'), async (req, res) => {
+  try {
+    const { action, reason } = req.body;
+    if (!['approve', 'revise'].includes(action)) {
+      return res.status(400).json({ error: 'action must be "approve" or "revise"' });
+    }
+    if (action === 'revise' && (!reason || !reason.trim())) {
+      return res.status(400).json({ error: 'Tell the lab what needs changing' });
+    }
+
+    const c = await prisma.case.findUnique({ where: { customId: req.params.customId } });
+    if (!c) return res.status(404).json({ error: 'Case not found' });
+    if (c.doctorId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+
+    if (c.status !== 'awaiting_doctor_approval') {
+      return res.status(400).json({
+        error: `This case is not awaiting your approval (status: ${c.status}).`,
+      });
+    }
+
+    // Production cannot start without a technician, same guard the manager
+    // path enforces — otherwise approval strands the case.
+    if (action === 'approve' && !c.assignedTechId) {
+      return res.status(400).json({ error: 'The lab has not assigned a technician yet. Please try again shortly.' });
+    }
+
+    const newStatus = action === 'approve' ? 'design_approved' : 'design_revision';
+
+    await prisma.case.update({
+      where: { id: c.id },
+      data: {
+        status: newStatus,
+        ...(action === 'approve'
+          ? { doctorApprovedAt: new Date(), doctorApprovalMethod: 'doctor', rejectionReason: null }
+          : { rejectionReason: reason.trim() }),
+      },
+    });
+
+    await prisma.timeline.create({
+      data: {
+        caseId: c.id,
+        label: action === 'approve'
+          ? '✅ Design approved by doctor'
+          : '↩️ Changes requested by doctor',
+        info: action === 'revise' ? reason.trim() : undefined,
+      },
+    });
+
+    // The clinical sign-off. This is the entry anyone auditing a
+    // remake or a complaint will look for first, so it records the
+    // doctor, the moment, and their stated reason verbatim.
+    await logAudit({
+      req,
+      action:     action === 'approve' ? AUDIT_ACTIONS.DESIGN_APPROVED : AUDIT_ACTIONS.DESIGN_REVISION,
+      entityType: 'case',
+      entityId:   c.id,
+      beforeState:{ status: c.status },
+      afterState: { status: newStatus, doctorApprovalMethod: action === 'approve' ? 'doctor' : null },
+      reason:     action === 'approve' ? 'Design approved by ordering doctor' : reason.trim(),
+      metadata:   { customId: c.customId },
+    });
+
+    const io = req.app.get('io');
+    if (io) io.emit('case:updated', { customId: c.customId, newStatus });
+
+    res.json({ success: true, newStatus });
+  } catch (err) {
+    console.error('PUT /cases/:id/design-approval error:', err);
+    res.status(500).json({ error: 'Failed to record design decision' });
+  }
+});
+
 // ─── PUT /api/cases/:customId ──────────────────────────────────
 router.put('/:customId', authenticate, async (req, res) => {
   try {
     const { tech, due, tracking, ...otherData } = req.body;
     const c = await prisma.case.findUnique({ where: { customId: req.params.customId } });
     if (!c) return res.status(404).json({ error: 'Case not found' });
+
+    // A clinic may only edit its own case.
+    if (req.user.role === 'clinic' && c.doctorId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
 
     const updateData = {};
     if (tech !== undefined) updateData.tech = tech;
@@ -805,10 +1090,42 @@ router.put('/:customId', authenticate, async (req, res) => {
 
     await prisma.case.update({ where: { customId: req.params.customId }, data: updateData });
 
+    // ─── Audit the edit, field by field ────────────────────────
+    // Only the fields that actually changed, with their old and new
+    // values, so a later reader can see that (say) the shade was
+    // altered after the design was approved — and by whom.
+    const changed = {};
+    Object.keys(updateData).forEach(k => {
+      if (c[k] !== updateData[k]) changed[k] = { from: c[k] ?? null, to: updateData[k] ?? null };
+    });
+
+    if (Object.keys(changed).length > 0) {
+      await logAudit({
+        req,
+        action:     AUDIT_ACTIONS.CASE_EDITED,
+        entityType: 'case',
+        entityId:   c.id,
+        beforeState: Object.fromEntries(Object.entries(changed).map(([k, v]) => [k, v.from])),
+        afterState:  Object.fromEntries(Object.entries(changed).map(([k, v]) => [k, v.to])),
+        reason:     `Edited: ${Object.keys(changed).join(', ')}`,
+        metadata:   { customId: c.customId },
+      });
+    }
+
     // If tech assigned, add timeline entry
     if (tech && tech !== 'Unassigned' && tech !== c.tech) {
       await prisma.timeline.create({
         data: { caseId: c.id, label: `Assigned to ${tech}` },
+      });
+      await logAudit({
+        req,
+        action:     AUDIT_ACTIONS.CASE_ASSIGNED,
+        entityType: 'case',
+        entityId:   c.id,
+        beforeState:{ tech: c.tech },
+        afterState: { tech },
+        reason:     `Assigned to ${tech}`,
+        metadata:   { customId: c.customId },
       });
     }
 
@@ -829,10 +1146,15 @@ router.post('/:customId/messages', authenticate, async (req, res) => {
     const c = await prisma.case.findUnique({ where: { customId: req.params.customId } });
     if (!c) return res.status(404).json({ error: 'Case not found' });
 
+    // A clinic may only post into its own case's chat.
+    if (req.user.role === 'clinic' && c.doctorId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const message = await prisma.message.create({
       data: {
         text,
-        from: from || (req.user.role === 'dentist' ? 'doctor' : 'lab'),
+        from: from || (req.user.role === 'clinic' ? 'doctor' : 'lab'),
         caseId: c.id,
         userId: req.user.id,
       },
@@ -874,6 +1196,12 @@ router.post('/:customId/upload', authenticate, upload.array('files', 10), async 
     if (!c) {
       if (req.files) req.files.forEach(f => { try { fs.unlinkSync(f.path); } catch(e){} });
       return res.status(404).json({ error: 'Case not found' });
+    }
+
+    // A clinic may only attach files to its own case.
+    if (req.user.role === 'clinic' && c.doctorId !== req.user.id) {
+      if (req.files) req.files.forEach(f => { try { fs.unlinkSync(f.path); } catch(e){} });
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     if (!req.files || req.files.length === 0) {
@@ -937,6 +1265,17 @@ router.post('/:customId/upload', authenticate, upload.array('files', 10), async 
       )
     );
 
+    // Files are evidence. Who attached what, and when, has to survive.
+    await logAudit({
+      req,
+      action:     AUDIT_ACTIONS.CASE_FILE_UPLOADED,
+      entityType: 'case',
+      entityId:   c.id,
+      afterState: { files: fileRecords.map(f => ({ id: f.id, filename: f.filename, size: f.size, category: f.category })) },
+      reason:     `Uploaded ${fileRecords.length} ${category} file${fileRecords.length > 1 ? 's' : ''}`,
+      metadata:   { customId: c.customId, category },
+    });
+
     const transformedFiles = fileRecords.map(f => ({
       id: f.id,
       name: f.filename,
@@ -964,6 +1303,46 @@ router.delete('/:customId/files/:fileId', authenticate, async (req, res) => {
   try {
     const file = await prisma.caseFile.findUnique({ where: { id: req.params.fileId } });
     if (!file) return res.status(404).json({ error: 'File not found' });
+
+    // ─── Authorisation ─────────────────────────────────────────
+    // This endpoint authorised nothing: any signed-in user could delete
+    // any file on any case by id, including another clinic's scans and
+    // the lab's design files. The fileId was not even checked against
+    // the case in the URL.
+    const c = await prisma.case.findUnique({ where: { customId: req.params.customId } });
+    if (!c || file.caseId !== c.id) {
+      return res.status(404).json({ error: 'File not found on this case' });
+    }
+
+    const role = req.user.role;
+    if (role === 'clinic') {
+      if (c.doctorId !== req.user.id) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      // A clinic may withdraw what it attached, never the lab's work.
+      if (file.uploadedBy !== 'clinic') {
+        return res.status(403).json({ error: 'Only the lab can remove lab-uploaded files.' });
+      }
+    } else if (['technician', 'cad_designer', 'ceramist'].includes(role)) {
+      const assigned = [c.assignedTechId, c.assignedDesignerId, c.assignedCeramistId].includes(req.user.id);
+      if (!assigned) {
+        return res.status(403).json({ error: 'You are not assigned to this case.' });
+      }
+    } else if (!['admin', 'manager'].includes(role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Record it BEFORE the row is gone, or the audit loses its subject.
+    await logAudit({
+      req,
+      action:     AUDIT_ACTIONS.CASE_FILE_DELETED,
+      entityType: 'case',
+      entityId:   c.id,
+      beforeState:{ id: file.id, filename: file.filename, size: file.size, category: file.category, uploadedBy: file.uploadedBy },
+      afterState: null,
+      reason:     req.body?.reason || `Deleted file ${file.filename}`,
+      metadata:   { customId: c.customId },
+    });
 
     // Delete physical file
     try { fs.unlinkSync(file.path); } catch { /* file may already be gone */ }

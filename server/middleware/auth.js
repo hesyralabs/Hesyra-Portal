@@ -72,9 +72,18 @@ const PERMISSIONS = {
 
   // ── Financial ───────────────────────────────────────────────
   'wallet.view_all':          ['admin'],
-  'wallet.view_any_clinic':   ['admin', 'manager'],   // manager: read-only
+  'wallet.view_any_clinic':   ['admin', 'manager'],   // manager: standing only, no ledger
   'wallet.view_own':          ['clinic'],
   'wallet.modify':            ['admin'],              // balance changes
+
+  // Deciding how much a clinic may owe is a financial decision, not an
+  // operational one. It was gated by 'wallet.view_any_clinic' — a READ
+  // permission guarding a WRITE — which is how a manager ended up able
+  // to grant credit lines.
+  'billing.set_terms':        ['admin'],
+  // Month-end invoicing bills work already dispatched; it derives
+  // amounts rather than setting them, so it stays operational.
+  'billing.generate_invoices':['admin', 'manager'],
   'payments.override':        ['admin'],              // manual payment confirm
   'payments.refund':          ['admin'],
   'payments.bonus_credit':    ['admin'],

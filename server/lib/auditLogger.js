@@ -4,11 +4,33 @@ const prisma = require('./prisma');
 const AUDIT_ACTIONS = {
   PAYMENT_OVERRIDE:     'PAYMENT_OVERRIDE',
   CASE_STATE_FORCE:     'CASE_STATE_FORCE',
+
+  // ─── Ordinary case lifecycle ─────────────────────────────────
+  // Previously only *forced* overrides were audited, so a case that
+  // moved through the whole pipeline normally left no record of who
+  // moved it — the Timeline is a patient-facing narrative with no
+  // actor, no before/after and no IP. Reconstructing "who sent this to
+  // print" after the fact was impossible. These cover the normal path.
+  CASE_CREATED:         'CASE_CREATED',
+  CASE_STATUS_CHANGE:   'CASE_STATUS_CHANGE',
+  CASE_EDITED:          'CASE_EDITED',
+  CASE_ASSIGNED:        'CASE_ASSIGNED',
+  CASE_FILE_UPLOADED:   'CASE_FILE_UPLOADED',
+  CASE_FILE_DELETED:    'CASE_FILE_DELETED',
+  CASE_DELETED:         'CASE_DELETED',
+  DESIGN_APPROVED:      'DESIGN_APPROVED',
+  DESIGN_REVISION:      'DESIGN_REVISION',
+  DESIGN_AUTO_APPROVED: 'DESIGN_AUTO_APPROVED',
+  PAYMENT_CONFIRMED:    'PAYMENT_CONFIRMED',
   ACCOUNT_SUSPEND:      'ACCOUNT_SUSPEND',
   ACCOUNT_REACTIVATE:   'ACCOUNT_REACTIVATE',
   ACCOUNT_CREATE:       'ACCOUNT_CREATE',
   ROLE_CHANGE:          'ROLE_CHANGE',
   BONUS_CREDIT:         'BONUS_CREDIT',
+  // Granting or revoking Net-30 terms. Was logged as CASE_STATE_FORCE
+  // "reusing the closest action type", which mislabelled a financial
+  // decision and put user rows into case-override searches.
+  CREDIT_TERMS_CHANGED: 'CREDIT_TERMS_CHANGED',
   REFUND:               'REFUND',
   REMAKE_APPROVED:      'REMAKE_APPROVED',
   REMAKE_REJECTED:      'REMAKE_REJECTED',

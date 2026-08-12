@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Layers, Sun, Moon } from 'lucide-react';
+import { LogOut, LayoutDashboard, Layers } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import styles from './DesignerLayout.module.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const DesignerLayout = () => {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [poolCount, setPoolCount] = useState(0);
@@ -70,13 +68,6 @@ const DesignerLayout = () => {
                 }}>{poolCount}</span>
               )}
             </NavLink>
-
-            <div className={styles.navSeparator}>Display</div>
-
-            <button className={styles.navItem} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-            </button>
           </nav>
         </div>
 

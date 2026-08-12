@@ -3,7 +3,6 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, Bell, Hexagon, Settings as SettingsIcon, MonitorPlay, LogOut, Archive as ArchiveIcon, CreditCard as BillingIcon, HelpCircle } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import NotificationDropdown from '../UI/NotificationDropdown';
-import ThemeToggle from '../UI/ThemeToggle/ThemeToggle';
 import { useAuth } from '../../context/AuthContext';
 import { useCases } from '../../context/CaseContext';
 import { useOnboarding } from '../../context/OnboardingContext';
@@ -97,7 +96,6 @@ const DashboardLayout = () => {
           <button className={styles.btnCircular} onClick={() => openDrawer('nav')} title="Help & Tour">
             <HelpCircle size={16} />
           </button>
-          <ThemeToggle className={styles.btnCircular} />
           <NotificationDropdown />
           <button className={styles.btnCircular} onClick={handleLogout} title="Sign Out">
             <LogOut size={16} />

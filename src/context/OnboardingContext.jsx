@@ -40,7 +40,7 @@ export const OnboardingProvider = ({ children }) => {
 
   // ─── On mount: decide if welcome should show ─────────────────
   useEffect(() => {
-    if (user && user.role === 'dentist' && user.onboardingComplete === true) {
+    if (user && user.role === 'clinic' && user.onboardingComplete === true) {
       if (user.welcomeCompleted === false) {
         const resumeStep = user.welcomeLastStep || 1;
         setCurrentWelcomeStep(resumeStep);

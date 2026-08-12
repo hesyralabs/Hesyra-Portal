@@ -116,9 +116,11 @@ async function processReadyForDispatch(caseId) {
  */
 async function dispatchOnCredit(caseId, caseData, doctor, amountPaise) {
   await prisma.$transaction(async (tx) => {
+    // Credit settles the money, not the parcel — the case still has to be
+    // packed and dispatched by a human.
     await tx.case.update({
       where: { id: caseId },
-      data: { status: 'dispatched', dispatchedOnCredit: true, dispatchedAt: new Date() },
+      data: { status: 'ready_for_dispatch', dispatchedOnCredit: true },
     });
 
     // Atomic increment — no read-then-write race
@@ -173,13 +175,13 @@ async function autoDeductFromWallet(caseId, wallet, amountPaise, userId) {
     await tx.case.update({
       where: { id: caseId },
       data: {
-        status: 'shipped',
+        status: 'ready_for_dispatch',
         paymentConfirmedAt: new Date(),
       },
     });
 
     await tx.timeline.create({
-      data: { caseId, label: 'Payment Auto-Deducted from Wallet — Dispatched' },
+      data: { caseId, label: '💳 Paid from wallet — cleared for dispatch' },
     });
   });
 
@@ -263,11 +265,14 @@ async function handlePaymentConfirmed(caseCustomId, razorpayPaymentId) {
       });
     }
 
-    // Update case to shipped
+    // Payment clears the case for hand-over — it does not perform the
+    // hand-over. The case returns to ready_for_dispatch so somebody still
+    // has to pack it and enter tracking. (This used to jump straight to
+    // 'shipped', which skipped packaging and tracking entirely.)
     await tx.case.update({
       where: { customId: caseCustomId },
       data: {
-        status: 'shipped',
+        status: 'ready_for_dispatch',
         paymentConfirmedAt: new Date(),
       },
     });
@@ -275,7 +280,7 @@ async function handlePaymentConfirmed(caseCustomId, razorpayPaymentId) {
     await tx.timeline.create({
       data: {
         caseId: caseData.id,
-        label: 'Payment Confirmed — Order Dispatched',
+        label: '💳 Payment confirmed — cleared for dispatch',
         info: razorpayPaymentId ? `Razorpay ID: ${razorpayPaymentId}` : 'Simulated payment',
       },
     });
@@ -298,7 +303,17 @@ async function handlePaymentConfirmed(caseCustomId, razorpayPaymentId) {
       || razorpayPaymentId.startsWith('pay_mock_'); // stub client generates these
     const isPureWalletMode = caseData.doctor?.preferredPaymentMode === 'wallet';
 
-    if (isSimulated && isPureWalletMode && wallet && amountDue > 0) {
+    // Never double-charge: if a payment record already collected this money
+    // externally (pay-on-go link, or the wallet portion of a split payment),
+    // the wallet must not be debited again. And never let a wallet go
+    // negative — if the balance cannot cover it, the money came from the
+    // payment link, not the wallet.
+    const alreadyCollectedExternally = pendingRecord
+      && (pendingRecord.type === 'PAY_ON_GO' || amountPaidViawallet > 0);
+    const walletCanCover = wallet && wallet.balancePaise >= amountDue;
+
+    if (isSimulated && isPureWalletMode && wallet && amountDue > 0
+        && !alreadyCollectedExternally && walletCanCover) {
       // Full wallet deduction for simulate path
       await tx.wallet.update({
         where: { id: wallet.id },
@@ -325,7 +340,7 @@ async function handlePaymentConfirmed(caseCustomId, razorpayPaymentId) {
   const updatedCase = await prisma.case.findUnique({ where: { customId: caseCustomId } });
   if (updatedCase) await generateInvoice(updatedCase);
 
-  return { success: true, status: 'shipped' };
+  return { success: true, status: 'ready_for_dispatch' };
 }
 
 /**
@@ -376,21 +391,43 @@ async function handleDepositConfirmed(caseCustomId, razorpayPaymentId) {
  */
 async function generateInvoice(caseData) {
   const now = new Date();
-  const invId = `INV-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${Math.floor(100 + Math.random() * 900)}`;
-  const amountINR = (caseData.totalAmountPaise || 0) / 100;
-  const taxAmount = Math.round(amountINR * config.GST_RATE * 100);
+
+  // Sequential per-month numbering. A random suffix collides against the
+  // unique constraint, and a tax invoice series has to be gap-free anyway.
+  const prefix = `INV-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const issuedThisMonth = await prisma.invoice.count({
+    where: { customId: { startsWith: prefix } },
+  });
+  const invId = `${prefix}-${String(issuedThisMonth + 1).padStart(4, '0')}`;
+
+  // totalAmountPaise already carries the GST that was added on top of the
+  // catalogue price at case creation, and it is exactly what the clinic
+  // was charged. Recover the net and tax components from it so the
+  // invoice total always reconciles to the amount collected.
+  const grossPaise = caseData.totalAmountPaise || 0;
+  const taxAmountPaise = Math.round(grossPaise * config.GST_RATE / (1 + config.GST_RATE));
+  const netPaise = grossPaise - taxAmountPaise;
+
+  // Resolve the real clinic name from the doctor record — the case's own
+  // clinic field is client-supplied and can hold a placeholder.
+  const doctor = caseData.doctorId
+    ? await prisma.user.findUnique({ where: { id: caseData.doctorId }, select: { clinic: true } })
+    : null;
 
   await prisma.invoice.create({
     data: {
       customId: invId,
-      amount: amountINR,
+      // Taxable value, in rupees. Add taxAmountPaise for the gross.
+      amount: netPaise / 100,
       status: 'paid',
-      clinic: caseData.clinic,
+      paidAt: caseData.paymentConfirmedAt || now,
+      clinic: doctor?.clinic || caseData.clinic,
+      userId: caseData.doctorId || null,
       invoiceType: 'per_case',
       gstRate: config.GST_RATE,
       hsnCode: config.HSN_CODE,
       gstin: config.HESYRA_GSTIN,
-      taxAmountPaise: taxAmount,
+      taxAmountPaise,
       cases: { connect: { id: caseData.id } },
     },
   });

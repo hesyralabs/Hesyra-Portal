@@ -1,15 +1,13 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
-import { Hexagon, LogOut, LayoutDashboard, Settings as SettingsIcon, Archive as ArchiveIcon, Sun, Moon } from 'lucide-react';
+import { Hexagon, LogOut, LayoutDashboard, Settings as SettingsIcon, Archive as ArchiveIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import NotificationDropdown from '../UI/NotificationDropdown';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import styles from './TechLayout.module.css';
 
 const TechLayout = () => {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,11 +49,6 @@ const TechLayout = () => {
               <SettingsIcon size={18} />
               <span>System Settings</span>
             </NavLink>
-
-            <button className={styles.navItem} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-            </button>
           </nav>
         </div>
 

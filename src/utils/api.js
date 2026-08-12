@@ -112,6 +112,14 @@ export const casesAPI = {
   update: (customId, data) =>
     apiFetch(`/cases/${customId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Ordering doctor's clinical sign-off on a CAD design.
+  // action: 'approve' | 'revise'
+  designApproval: (customId, action, reason) =>
+    apiFetch(`/cases/${customId}/design-approval`, {
+      method: 'PUT',
+      body: JSON.stringify({ action, reason }),
+    }),
+
   addMessage: (customId, text, from) =>
     apiFetch(`/cases/${customId}/messages`, { method: 'POST', body: JSON.stringify({ text, from }) }),
 
@@ -216,6 +224,23 @@ export const strikesAPI = {
     apiFetch(`/strikes/resolution-tickets/${id}`, { method: 'PUT', body: JSON.stringify({ status, adminNotes }) }),
 
   getOverdueQueue: () => apiFetch('/strikes/overdue-queue'),
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// SCAN DAY API
+// Launch offer: a scanner visit opens a 7-day window in which crown
+// orders earn complimentary crowns. Credits are a redeemable
+// entitlement against a future crown, never wallet money.
+// ═══════════════════════════════════════════════════════════════════
+export const scanDayAPI = {
+  // Clinic: unredeemed crowns + progress inside any open window.
+  myCredits: () => apiFetch('/scan-day/my-credits'),
+
+  // Lab staff: visit log.
+  listVisits: () => apiFetch('/scan-day/visits'),
+
+  logVisit: (data) =>
+    apiFetch('/scan-day/visits', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // ═══════════════════════════════════════════════════════════════════

@@ -10,6 +10,7 @@ const { autoAssignCase } = require('./assignmentEngine');
 
 let schedulerInterval = null;
 let poolCheckInterval = null;
+let approvalCheckInterval = null;
 
 // Fix #17: Per case-type configurable pool timeout in minutes
 // Surgical guides and complex cases get more time; simple retainers less.
@@ -38,13 +39,21 @@ async function runStrikeEvaluation(io) {
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - config.STRIKE_DAYS_THRESHOLD);
 
-    // Find all cases that are overdue:
-    // - Status is payment_pending or ready_for_dispatch
-    // - readyForDispatchAt is more than 7 days ago
-    // - No active dispute
+    // Find all cases that are overdue. Keyed off "money not received"
+    // rather than off a status list, because:
+    //   - a PAID case now rests at ready_for_dispatch while it waits to be
+    //     packed, and must never be struck for that;
+    //   - an unpaid case that somehow reached packaged/dispatched/completed
+    //     used to escape collection entirely.
+    // Net-30 clinics are excluded — runCreditOverdueCheck chases those.
     const overdueCases = await prisma.case.findMany({
       where: {
-        status: { in: ['payment_pending', 'ready_for_dispatch'] },
+        status: { in: [
+          'payment_pending', 'ready_for_dispatch', 'overdue',
+          'packaged', 'dispatched', 'shipped', 'completed',
+        ] },
+        paymentConfirmedAt: null,
+        dispatchedOnCredit: false,
         readyForDispatchAt: { lte: thresholdDate },
         disputeActive: { not: true }, // Handles both false and null
       },
@@ -412,6 +421,171 @@ async function runCreditOverdueCheck(io) {
  * Start the scheduler — runs the evaluation immediately, then every 24 hours.
  * In production, this would be aligned to midnight IST.
  */
+// ═══════════════════════════════════════════════════════════════
+// DESIGN APPROVAL SWEEP
+// Resolves cases parked on the doctor's desk. Runs every 5 minutes.
+//
+// Before the due date  → nudge the doctor at the configured points.
+// After the due date   → auto-approve if the clinic allows it, otherwise
+//                        escalate to the manager and stop nagging.
+//
+// The lab bench is idle for the whole of this window, so nothing is
+// allowed to sit here indefinitely.
+// ═══════════════════════════════════════════════════════════════
+async function runDesignApprovalSweep(io) {
+  const now = new Date();
+
+  const pending = await prisma.case.findMany({
+    where: {
+      status: 'awaiting_doctor_approval',
+      doctorApprovalDueAt: { not: null },
+    },
+    include: { doctor: { select: { id: true, name: true, autoApproveDesigns: true } } },
+  });
+
+  if (pending.length === 0) return;
+
+  let approved = 0, reminded = 0, escalated = 0;
+
+  for (const c of pending) {
+    const sentAt = new Date(c.doctorApprovalSentAt || c.createdAt).getTime();
+    const dueAt  = new Date(c.doctorApprovalDueAt).getTime();
+    const windowMs = Math.max(dueAt - sentAt, 1);
+
+    // ─── Past due ────────────────────────────────────────────
+    if (now.getTime() >= dueAt) {
+      // Two things can withhold auto-approval: the clinic's own
+      // preference, and the nature of the work. The second overrides
+      // the first — see AUTO_APPROVE_EXCLUDED_CASE_TYPES in config.
+      const optedOut  = c.doctor?.autoApproveDesigns === false;
+      const excluded  = (config.AUTO_APPROVE_EXCLUDED_CASE_TYPES || []).includes(c.caseType);
+      const highValue = (c.totalAmountPaise || 0) > (config.AUTO_APPROVE_MAX_VALUE_PAISE ?? Infinity);
+
+      if (optedOut || excluded || highValue) {
+        // Escalate once and leave the case for a human to decide.
+        const why = excluded
+          ? `${c.caseType.replace('_', ' ')} designs are never auto-approved — this one needs a person to sign it off.`
+          : highValue
+            ? `This case is ₹${Math.round((c.totalAmountPaise || 0) / 100).toLocaleString('en-IN')}, above the auto-approval ceiling, so it needs a person to sign it off.`
+            : `${c.doctor?.name || 'The doctor'} has auto-approval switched off, so this case waits for a human decision.`;
+
+        if (!c.approvalEscalatedAt) {
+          await prisma.case.update({
+            where: { id: c.id },
+            data: { approvalEscalatedAt: now },
+          });
+          await prisma.timeline.create({
+            data: {
+              caseId: c.id,
+              label: '⚠️ Approval overdue — escalated to lab manager',
+              info: why,
+            },
+          });
+          if (io) io.emit('case:approval_escalated', { customId: c.customId, doctorId: c.doctorId });
+          escalated++;
+        }
+        continue;
+      }
+
+      // Auto-approve — but never strand a case without a technician.
+      if (!c.assignedTechId) {
+        if (!c.approvalEscalatedAt) {
+          await prisma.case.update({ where: { id: c.id }, data: { approvalEscalatedAt: now } });
+          await prisma.timeline.create({
+            data: {
+              caseId: c.id,
+              label: '⚠️ Auto-approval blocked — no technician assigned',
+              info: 'Assign a technician, and this case will auto-approve on the next sweep.',
+            },
+          });
+          escalated++;
+        }
+        continue;
+      }
+
+      await prisma.case.update({
+        where: { id: c.id },
+        data: {
+          status: 'design_approved',
+          doctorApprovedAt: now,
+          doctorApprovalMethod: 'auto',
+          rejectionReason: null,
+        },
+      });
+
+      await prisma.timeline.create({
+        data: {
+          caseId: c.id,
+          label: '⏱️ Design auto-approved — no response from doctor',
+          info: `The approval window closed at ${new Date(dueAt).toLocaleString('en-IN')}. Production has started. Raise a support ticket immediately if this design needs changes.`,
+        },
+      });
+
+      try {
+        await prisma.auditLog.create({
+          data: {
+            actorId:    c.doctorId,
+            actorRole:  'system',
+            action:     'DESIGN_AUTO_APPROVED',
+            entityType: 'case',
+            entityId:   c.id,
+            beforeState: JSON.stringify({ status: 'awaiting_doctor_approval' }),
+            afterState:  JSON.stringify({ status: 'design_approved', method: 'auto' }),
+            reason:      'Doctor did not respond before the approval deadline',
+          },
+        });
+      } catch { /* audit is best-effort */ }
+
+      if (io) {
+        io.emit('case:updated', { customId: c.customId, newStatus: 'design_approved' });
+        io.emit('case:auto_approved', { customId: c.customId, doctorId: c.doctorId });
+      }
+      approved++;
+      continue;
+    }
+
+    // ─── Still within the window — send the next reminder ────
+    const elapsedFraction = (now.getTime() - sentAt) / windowMs;
+    const points = config.DESIGN_APPROVAL_REMINDER_POINTS || [];
+    const dueReminders = points.filter(p => elapsedFraction >= p).length;
+
+    if (dueReminders > (c.approvalRemindersSent || 0)) {
+      const hoursLeft = Math.max(0, Math.round((dueAt - now.getTime()) / 3600000));
+      await prisma.case.update({
+        where: { id: c.id },
+        data: { approvalRemindersSent: dueReminders },
+      });
+      await prisma.timeline.create({
+        data: {
+          caseId: c.id,
+          label: `🔔 Approval reminder sent to ${c.doctor?.name || 'doctor'}`,
+          // Must agree with the past-due branch above, or the warning
+          // promises an outcome the sweep will not deliver.
+          info: `${hoursLeft}h left before this design ${
+            c.doctor?.autoApproveDesigns === false ||
+            (config.AUTO_APPROVE_EXCLUDED_CASE_TYPES || []).includes(c.caseType) ||
+            (c.totalAmountPaise || 0) > (config.AUTO_APPROVE_MAX_VALUE_PAISE ?? Infinity)
+              ? 'is escalated to the lab manager'
+              : 'auto-approves and goes into production'
+          }.`,
+        },
+      });
+      if (io) {
+        io.emit('case:approval_reminder', {
+          customId: c.customId,
+          doctorId: c.doctorId,
+          hoursLeft,
+        });
+      }
+      reminded++;
+    }
+  }
+
+  if (approved || reminded || escalated) {
+    console.log(`  👨‍⚕️ [Approval Sweep] ${reminded} reminder(s), ${approved} auto-approved, ${escalated} escalated.`);
+  }
+}
+
 function startScheduler(io) {
   console.log('🕐 [Daily Scheduler] Initialized — will check daily for overdue payments and archival sweeps');
 
@@ -441,6 +615,17 @@ function startScheduler(io) {
   }, 65 * 1000);
 
   console.log('🎯 [Pool Scheduler] Initialized — will auto-assign unclaimed cases after 1 hour');
+
+  // ─── Design approval sweep: check every 5 minutes ─────────
+  setTimeout(() => {
+    runDesignApprovalSweep(io).catch(e => console.error('Approval sweep failed:', e.message));
+    approvalCheckInterval = setInterval(
+      () => runDesignApprovalSweep(io).catch(e => console.error('Approval sweep failed:', e.message)),
+      5 * 60 * 1000
+    );
+  }, 75 * 1000);
+
+  console.log(`👨‍⚕️ [Approval Scheduler] Initialized — designs auto-resolve after ${config.DESIGN_APPROVAL_SLA_HOURS}h (${config.DESIGN_APPROVAL_SLA_HOURS_PRIORITY}h for priority)`);
 }
 
 /**
@@ -455,6 +640,10 @@ function stopScheduler() {
     clearInterval(poolCheckInterval);
     poolCheckInterval = null;
   }
+  if (approvalCheckInterval) {
+    clearInterval(approvalCheckInterval);
+    approvalCheckInterval = null;
+  }
 }
 
 module.exports = {
@@ -465,5 +654,6 @@ module.exports = {
   runPoolEscalation,
   runMonthlyInvoicing,
   runCreditOverdueCheck,
+  runDesignApprovalSweep,
 };
 

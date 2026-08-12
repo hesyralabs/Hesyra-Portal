@@ -41,9 +41,14 @@ router.get('/materials', async (req, res) => {
       category: m.category,
       shadeApplicable: m.shadeApplicable,
       finishingTiers: JSON.parse(m.finishingTiers || '["standard"]'),
-      // Pricing: only visible to lab staff. Doctors see calculated totals at checkout.
-      basePrice: isLabStaff ? m.basePrice : undefined,
-      premiumUpcharge: isLabStaff ? m.premiumUpcharge : undefined,
+      // Pricing is published in the Hesyra price list, so it is not
+      // confidential — clinics see the same rates as the lab and can
+      // price a case up front instead of finding out at checkout.
+      basePrice: m.basePrice,
+      premiumUpcharge: m.premiumUpcharge,
+      // Lets the case form show a "from" price per category without
+      // firing one request per case type.
+      caseTypes: (() => { try { return JSON.parse(m.caseTypes || '[]'); } catch { return []; } })(),
       sortOrder: m.sortOrder,
       stockNote: isLabStaff ? m.stockNote : undefined,
     })));
@@ -51,6 +56,35 @@ router.get('/materials', async (req, res) => {
     console.error('GET /catalog/materials error:', err);
     res.status(500).json({ error: 'Failed to fetch materials' });
   }
+});
+
+// ─── GET /api/catalog/pricing-rules ────────────────────────────
+// The category rules that are not expressible as a material SKU:
+// aligner treatment tiers, per-implant guide pricing, veneer base
+// cases, and the categories that are quote-on-request.
+router.get('/pricing-rules', (req, res) => {
+  const pricing = require('../lib/pricing');
+  res.json({
+    gstRate: require('../lib/config').GST_RATE,
+    alignerTiers: Object.entries(pricing.ALIGNER_TIERS).map(([id, t]) => ({
+      id,
+      label: t.label,
+      note: t.note,
+      casePaise: t.casePaise ?? null,
+      includedSets: t.includedSets ?? null,
+      extraSetPaise: t.extraSetPaise ?? null,
+      perSetPaise: t.perSetPaise ?? null,
+      bothArchPaise: t.bothArchPaise ?? null,
+      perArchPaise: t.perArchPaise ?? null,
+      payPerSet: !!t.payPerSet,
+      unlimited: !!t.unlimited,
+    })),
+    guidePricing: pricing.GUIDE_PRICE_BY_IMPLANTS,
+    guideMaxImplants: pricing.GUIDE_MAX_PRICED_IMPLANTS,
+    vspAddOnPaise: pricing.VSP_ADDON_PAISE,
+    veneerRules: pricing.VENEER_RULES,
+    quoteOnRequest: pricing.QUOTE_ON_REQUEST,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════

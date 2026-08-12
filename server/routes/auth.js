@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const prisma = require('../lib/prisma');
 const { generateToken, authenticate } = require('../middleware/auth');
+const config = require('../lib/config');
 
 const router = express.Router();
 
@@ -98,8 +99,8 @@ router.put('/onboarding', authenticate, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (user.role !== 'dentist') {
-      return res.status(403).json({ success: false, message: 'Onboarding is only for dentist accounts.' });
+    if (user.role !== 'clinic') {
+      return res.status(403).json({ success: false, message: 'Onboarding is only for clinic accounts.' });
     }
 
     const {
@@ -319,7 +320,8 @@ router.put('/profile', authenticate, async (req, res) => {
       scannerModel,
       shippingAddress, shippingCity, shippingState, shippingPinCode,
       preferredCourier, preferredContact,
-      notificationPreferences
+      notificationPreferences,
+      preferredPaymentMode, autoApproveDesigns,
     } = req.body;
 
     const updateData = {
@@ -342,6 +344,28 @@ router.put('/profile', authenticate, async (req, res) => {
 
     if (notificationPreferences !== undefined) {
       updateData.notificationPreferences = typeof notificationPreferences === 'string' ? notificationPreferences : JSON.stringify(notificationPreferences);
+    }
+
+    // ─── Settings that change how the portal behaves ───────────
+    // These two are only meaningful for a clinic, and both drive real
+    // money/production decisions, so they are validated rather than
+    // written through blindly.
+    if (preferredPaymentMode !== undefined) {
+      const modes = Object.values(config.PAYMENT_MODES);
+      if (!modes.includes(preferredPaymentMode)) {
+        return res.status(400).json({ success: false, message: `Payment mode must be one of: ${modes.join(', ')}` });
+      }
+      if (req.user.role !== 'clinic') {
+        return res.status(403).json({ success: false, message: 'Payment mode applies to clinic accounts only.' });
+      }
+      updateData.preferredPaymentMode = preferredPaymentMode;
+    }
+
+    if (autoApproveDesigns !== undefined) {
+      if (req.user.role !== 'clinic') {
+        return res.status(403).json({ success: false, message: 'Design approval preference applies to clinic accounts only.' });
+      }
+      updateData.autoApproveDesigns = !!autoApproveDesigns;
     }
 
     // Remove undefined fields so we don't accidentally blank them out

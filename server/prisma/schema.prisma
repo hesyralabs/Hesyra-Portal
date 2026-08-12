@@ -75,6 +75,13 @@ model User {
   trustLevel           String  @default("clean")
   preferredPaymentMode String  @default("pay_on_go")
 
+  // ─── Design approval preference (clinic role only) ───────────
+  // true  → an unanswered design auto-approves at its due date so the
+  //         case keeps moving (the doctor is warned before and after).
+  // false → nothing auto-approves; the case escalates to the manager
+  //         and waits for a human. Slower, but nothing ships unseen.
+  autoApproveDesigns   Boolean @default(true)
+
   // ─── Credit / Billing Terms (clinic role only) ───────────────
   // billingMode: 'prepaid' (default, pay before dispatch)
   //              'net_30'  (dispatch on credit, consolidated monthly invoice)
@@ -88,6 +95,7 @@ model User {
   cases              Case[]              @relation("DoctorCases")
   techCases          Case[]              @relation("TechCases")
   designerCases      Case[]              @relation("DesignerCases")
+  ceramistCases      Case[]              @relation("CeramistCases")
   messages           Message[]
   wallet             Wallet?
   strikes            Strike[]
@@ -97,6 +105,8 @@ model User {
   assignedTickets    SupportTicket[]     @relation("TicketAssignee")
   auditLogs          AuditLog[]
   designerStats      DesignerStats?
+  scanVisits         ScanVisit[]         @relation("ClinicScanVisits")
+  crownCredits       CrownCredit[]       @relation("ClinicCrownCredits")
   invoices           Invoice[]           @relation("ClinicInvoices")
 }
 
@@ -140,6 +150,18 @@ model Case {
   internalNotes   String?   // Visible to manager + technician only — NEVER to clinic
   priorityFlag    Boolean   @default(false)
 
+  // ─── Doctor design approval ───────────────────────────────────
+  // After lab QC passes, the design goes to the ordering doctor for
+  // clinical sign-off. A case that sits unanswered past its due date is
+  // resolved by the scheduler — auto-approved, or escalated to the
+  // manager if the clinic opted out of auto-approval.
+  doctorApprovalSentAt  DateTime?
+  doctorApprovalDueAt   DateTime?
+  doctorApprovedAt      DateTime?
+  doctorApprovalMethod  String?   // 'doctor' | 'auto' | 'manager_override'
+  approvalRemindersSent Int       @default(0)
+  approvalEscalatedAt   DateTime? // Manager was asked to decide
+
   // ─── Dispatch fields ──────────────────────────────────────────
   dispatchPhotoUrl    String?   // Mandatory before status → 'dispatched'
   packagedAt          DateTime?
@@ -166,7 +188,29 @@ model Case {
   // assignedCeramistId is set after printing, when tech hands off finishing.
   printBatchId        String?
   printBatch          PrintBatch?  @relation("BatchCases", fields: [printBatchId], references: [id])
+  // Was a bare foreign key with no relation declared, so the ceramist
+  // who finished a case could not be joined — only looked up by id
+  // afterwards. Every other assignment on this model has a relation.
   assignedCeramistId  String?
+  assignedCeramist    User?    @relation("CeramistCases", fields: [assignedCeramistId], references: [id])
+
+  // ─── Category-specific pricing inputs ───────────────────────
+  // Each of these drives a pricing rule that plain price × units
+  // cannot express. See lib/pricing.js.
+  implantCount        Int?      // Surgical guides — billed per implant
+  virtualSurgicalPlan Boolean @default(false) // Guides — VSP add-on
+  alignerTier         String?   // 'flexi' | 'standard' | 'premium' | 'elite' | 'executive'
+  extraAlignerSets    Int     @default(0)     // Sets beyond the tier's included count
+
+  // ─── Warranty ────────────────────────────────────────────────
+  // Snapshotted from the SKU at order time. The published warranty can
+  // change, but a case must be honoured on the terms it was sold under.
+  warrantyYears       Int?
+  warrantyStartsAt    DateTime?  // Set on delivery, not on order
+
+  // ─── Scan Day launch offer ───────────────────────────────────
+  // Set when this case was fulfilled by a complimentary-crown credit.
+  complimentary       Boolean @default(false)
 
   // ─── SKU Catalog (material + finishing tier) ────────────────
   materialSkuId       String?               // FK to MaterialSKU — null for legacy cases
@@ -223,11 +267,63 @@ model MaterialSKU {
   finishingTiers  String   @default("[\"standard\",\"premium\"]") // JSON: which tiers available
   basePrice       Int?                       // Base price in paise per unit
   premiumUpcharge Int?                       // Signature Match upcharge paise (per unit for crown/veneer, per tooth for bridge)
+  warrantyYears   Int?                       // Published warranty for this tier (crowns: 5/5/7/10)
   sortOrder       Int      @default(0)       // Display order in form
   active          Boolean  @default(true)    // Manager toggles stock
   stockNote       String?                    // "Low stock — ETA 2 weeks"
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCAN DAY — launch offer.
+// "Our intra oral scanner comes to you. 5 crown orders in a single
+// scan visit → +1 crown free. 20 crown orders within one week of your
+// scan visit → +5 crowns free."
+//
+// A visit is logged by lab staff when the scanner attends a clinic.
+// Qualifying crown orders in the seven days that follow earn credits.
+// Complimentary crowns are issued in the same tier as those ordered
+// (the most-ordered tier where mixed), and are not exchangeable for
+// cash or credit — hence a credit ledger rather than a wallet top-up.
+// ═══════════════════════════════════════════════════════════════
+model ScanVisit {
+  id            String   @id @default(uuid())
+  customId      String   @unique          // SV-YYMM-XXX
+  userId        String                    // The clinic visited
+  user          User     @relation("ClinicScanVisits", fields: [userId], references: [id])
+  visitedAt     DateTime @default(now())
+  qualifiesUntil DateTime                 // visitedAt + 7 days
+  recordedBy    String                    // Lab staff userId
+  notes         String?
+
+  // Rolling tallies, recalculated as qualifying orders land
+  crownOrderCount Int    @default(0)
+  creditsIssued   Int    @default(0)      // Complimentary crowns granted so far
+
+  createdAt     DateTime @default(now())
+  credits       CrownCredit[]
+}
+
+model CrownCredit {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation("ClinicCrownCredits", fields: [userId], references: [id])
+  scanVisitId  String?
+  scanVisit    ScanVisit? @relation(fields: [scanVisitId], references: [id])
+
+  // The tier this credit is redeemable against — issued in the same
+  // tier as the orders that earned it.
+  materialSkuId String?
+  tierLabel     String?
+
+  reason       String                     // "5 crown orders in a single scan visit"
+  redeemed     Boolean   @default(false)
+  redeemedAt   DateTime?
+  redeemedOnCaseId String?
+  expiresAt    DateTime?
+
+  createdAt    DateTime  @default(now())
 }
 
 // ═══════════════════════════════════════════════════════════════

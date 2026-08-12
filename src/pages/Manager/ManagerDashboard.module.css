@@ -1,9 +1,221 @@
 .container {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  /* 2rem between five counter tiles and nothing else was why this page
+     ended two-thirds of the way down the screen. */
+  gap: 1rem;
   max-width: 1400px;
+  /* Fill the viewport so the queue owns the leftover space instead of
+     leaving a band of empty page under a short list. Viewport units,
+     not a percentage: the layout wraps this in a flex child whose own
+     height is content-derived, so `100%` resolves to nothing.
+     The subtrahend is the content wrapper's 2.5rem top/bottom padding. */
+  min-height: calc(100vh - 80px);
 }
+
+/* ─── Attention band ──────────────────────────────────────────
+   Only rendered when it has something in it. */
+.attentionBand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0.6rem 0.85rem;
+  background: color-mix(in srgb, #f59e0b 7%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 26%, transparent);
+  border-radius: 12px;
+}
+
+.attentionIcon { color: #f59e0b; flex: 0 0 auto; }
+
+.attentionItems { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.attentionChip {
+  display: inline-flex; align-items: center;
+  padding: 0.28rem 0.7rem;
+  font-size: 12.5px; font-weight: 600;
+  border-radius: 999px; cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+.attentionChip:hover { filter: brightness(1.15); }
+
+.attentionChip.act  { color: #34d399; border-color: rgba(52, 211, 153, 0.35); }
+.attentionChip.warn { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); }
+.attentionChip.info { color: #c084fc; border-color: rgba(192, 132, 252, 0.35); }
+
+/* ─── Toolbar ─── */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+
+.segments {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--glass-border); border-radius: 10px;
+}
+
+.segment {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.38rem 0.75rem;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent; border: 0; border-radius: 8px; cursor: pointer;
+  white-space: nowrap;
+}
+.segment:hover:not(:disabled) { color: var(--text-primary); }
+.segment:disabled { opacity: 0.4; cursor: default; }
+.segmentOn { background: var(--text-primary); color: var(--bg-base); }
+
+.segCount {
+  font-size: 11px; font-weight: 700;
+  padding: 1px 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.segmentOn .segCount { background: rgba(0, 0, 0, 0.18); }
+
+.search {
+  flex: 0 1 300px;
+  padding: 0.45rem 0.75rem;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+}
+.search:focus { outline: none; border-color: var(--brand-bioceramic); }
+
+/* ─── Work queue ─────────────────────────────────────────────── */
+.queueCard {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  overflow: hidden;
+  /* Takes the remaining height; the pipeline strip stays pinned to the
+     bottom edge of the card rather than floating mid-page. */
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.queueHead, .queueRow {
+  display: grid;
+  grid-template-columns: 1.7fr 1.3fr 1.6fr 1.2fr 62px;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.6rem 1rem;
+}
+
+.queueHead {
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+/* Grows into spare space when the list is short, and scrolls inside
+   itself when it is long — otherwise a busy day pushed the pipeline
+   strip off the bottom of the screen. The subtrahend is the chrome
+   above and below: header, attention band, toolbar, gaps and strip. */
+.queueBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
+}
+
+.queueRow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.queueRow:hover { background: rgba(255, 255, 255, 0.03); }
+.queueRow:last-child { border-bottom: 0; }
+
+.cellCase, .cellClinic, .cellHolder { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.caseIdRow {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.caseSub {
+  font-size: 11px; color: var(--text-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-transform: capitalize;
+}
+
+.clinicName {
+  font-size: 12.5px; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Same milestone track the clinic dashboard draws. */
+.track { display: flex; align-items: center; gap: 3px; }
+
+.step { flex: 1 1 0; min-width: 0; }
+
+.stepBar {
+  display: block; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stepDone .stepBar { background: var(--brand-bioceramic); }
+.stepNow  .stepBar { background: #fbbf24; }
+
+.stageName {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-size: 11px; color: var(--text-secondary); white-space: nowrap;
+}
+
+.holder { font-size: 12px; font-weight: 500; }
+.holder.act  { color: #34d399; }
+.holder.warn { color: #fbbf24; }
+.holder.wait { color: var(--text-secondary); }
+.holder.done { color: var(--text-tertiary); }
+
+.lateFlag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #f87171;
+}
+
+.cellAge { font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+.colRight { text-align: right; }
+
+.queueEmpty {
+  padding: 2.5rem 1rem; text-align: center;
+  color: var(--text-secondary); font-size: 13px;
+}
+
+/* ─── Pipeline drill-down ─── */
+.pipelineStrip {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.pipeChip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0.22rem 0.6rem;
+  font-size: 11.5px; color: var(--text-secondary);
+  background: transparent; cursor: pointer;
+  border: 1px solid var(--glass-border); border-radius: 999px;
+}
+.pipeChip:hover { color: var(--text-primary); border-color: var(--glass-border-strong); }
+
+.pipeChipOn {
+  color: var(--tile-color);
+  border-color: var(--tile-color);
+  background: color-mix(in srgb, var(--tile-color) 12%, transparent);
+}
+
+.pipeCount { font-weight: 700; color: var(--tile-color); }
 
 /* ─── Header ─── */
 .header {

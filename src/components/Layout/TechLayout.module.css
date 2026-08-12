@@ -241,34 +241,6 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Light Mode Overrides ─── */
-:global(.light-mode) .sidebar {
-  background: #fff;
-  box-shadow: 10px 0 30px rgba(0, 26, 51, 0.03);
-}
-
-:global(.light-mode) .brandMain { color: var(--brand-azure); }
-:global(.light-mode) .brandSub { color: var(--text-tertiary); }
-
-:global(.light-mode) .navItem:hover {
-  background: var(--bg-base);
-  color: var(--brand-azure);
-}
-
-:global(.light-mode) .navItem.active {
-  background: rgba(122, 156, 150, 0.08);
-  color: var(--brand-bioceramic);
-}
-
-:global(.light-mode) .techName { color: var(--text-primary); }
-:global(.light-mode) .logoutBtn { background: var(--bg-base); }
-
-:global(.light-mode) .main {
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(122, 156, 150, 0.08) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(226, 232, 240, 0.5) 0px, transparent 50%);
-}
-
 /* ─── Mobile Responsiveness ─── */
 @media (max-width: 768px) {
   .layout {

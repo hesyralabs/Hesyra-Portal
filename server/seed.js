@@ -57,7 +57,7 @@ async function seed() {
     {
       customId: 'TECH-001',
       username: 'tech_001',
-      name: 'Lab Technician',
+      name: 'Meera Joshi',
       email: 'tech@hesyra.com',
       password: 'Hesyra@2026',
       role: 'technician',
@@ -67,7 +67,10 @@ async function seed() {
     {
       customId: 'CAD-001',
       username: 'cad_001',
-      name: 'CAD Designer',
+      // A person, not a job title. Seeding an account called "CAD
+      // Designer" meant every audit column and case record read
+      // "CAD Designer" — which identifies nobody once there are two.
+      name: 'Arjun Deshpande',
       email: 'cad@hesyra.com',
       password: 'Hesyra@2026',
       role: 'cad_designer',
@@ -287,13 +290,13 @@ async function seed() {
       status: 'designing',
       clinic: 'Hesyra Dental Clinic',
       due: 'Standard',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       doctorId: doctor1.id,
       totalAmountPaise: 150000,
       timeline: {
         create: [
           { label: 'Case Submitted' },
-          { label: 'Assigned to Lab Technician' },
+          { label: 'Assigned to Meera Joshi' },
           { label: 'CAD design started' },
         ],
       },
@@ -316,14 +319,14 @@ async function seed() {
       status: 'payment_pending',
       clinic: 'Hesyra Dental Clinic',
       due: 'Express',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       doctorId: doctor1.id,
       totalAmountPaise: 300000,
       readyForDispatchAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
       timeline: {
         create: [
           { label: 'Case Submitted' },
-          { label: 'Assigned to Lab Technician' },
+          { label: 'Assigned to Meera Joshi' },
           { label: 'CAD design started' },
           { label: 'Design Completed — Printing' },
           { label: 'Quality Check Passed — Ready for Dispatch' },
@@ -362,14 +365,14 @@ async function seed() {
       status: 'overdue',
       clinic: 'Smile Dental Care',
       due: 'Standard',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       doctorId: doctor2.id,
       totalAmountPaise: 180000,
       readyForDispatchAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
       timeline: {
         create: [
           { label: 'Case Submitted' },
-          { label: 'Assigned to Lab Technician' },
+          { label: 'Assigned to Meera Joshi' },
           { label: 'Quality Check Passed — Ready for Dispatch' },
           { label: 'Strike 1 Applied — Payment Overdue' },
         ],
@@ -415,7 +418,7 @@ async function seed() {
       clinic: 'Hesyra Dental Clinic',
       due: 'Express',
       priorityFlag: true,
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       doctorId: doctor1.id,
@@ -423,7 +426,7 @@ async function seed() {
       timeline: {
         create: [
           { label: 'Case Submitted' },
-          { label: 'Assigned to Lab Technician' },
+          { label: 'Assigned to Meera Joshi' },
           { label: '⚡ Flagged as priority' },
           { label: 'CAD work assigned' },
         ],
@@ -449,7 +452,7 @@ async function seed() {
       status: 'design_ready',
       clinic: 'Hesyra Dental Clinic',
       due: 'Standard',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       doctorId: doctor1.id,
@@ -457,7 +460,7 @@ async function seed() {
       timeline: {
         create: [
           { label: 'Case Submitted' },
-          { label: 'Assigned to Lab Technician' },
+          { label: 'Assigned to Meera Joshi' },
           { label: 'CAD work assigned' },
           { label: 'Design file(s) uploaded (2)' },
           { label: '✅ Design submitted for review' },
@@ -483,7 +486,7 @@ async function seed() {
       status: 'design_revision',
       clinic: 'Smile Dental Care',
       due: 'Standard',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       rejectionReason: 'The palatal coverage is too thin at the midline. Please increase thickness to minimum 2mm and recheck the posterior occlusal clearance.',
@@ -518,7 +521,7 @@ async function seed() {
       status: 'cad_assigned',
       clinic: 'Hesyra Dental Clinic',
       due: 'Standard',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       doctorId: doctor1.id,
@@ -526,7 +529,7 @@ async function seed() {
       timeline: {
         create: [
           { label: 'Case Submitted' },
-          { label: 'Assigned to Lab Technician' },
+          { label: 'Assigned to Meera Joshi' },
           { label: 'CAD work assigned' },
         ],
       },
@@ -579,7 +582,7 @@ async function seed() {
       clinic: 'Hesyra Dental Clinic',
       due: 'Express',
       priorityFlag: true,
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       doctorId: doctor1.id,
@@ -637,7 +640,7 @@ async function seed() {
       status: 'post_processing',
       clinic: 'Hesyra Dental Clinic',
       due: 'Express',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       doctorId: doctor1.id,
@@ -649,7 +652,7 @@ async function seed() {
           { label: '🎨 Design file(s) uploaded (1)' },
           { label: '✅ Design submitted for manager review (1 file)' },
           { label: '✅ Design approved by Manager' },
-          { label: '🖨️ Post-processing started by Lab Technician' },
+          { label: '🖨️ Post-processing started by Meera Joshi' },
         ],
       },
     },
@@ -694,7 +697,7 @@ async function seed() {
       status: 'qa',
       clinic: 'Smile Dental Care',
       due: 'Standard',
-      tech: 'Lab Technician',
+      tech: 'Meera Joshi',
       assignedTechId: techUser.id,
       assignedDesignerId: cadDesigner.id,
       doctorId: doctor2.id,
@@ -787,7 +790,7 @@ async function seed() {
         status: 'design_approved',
         clinic: bc.doctor === doctor1 ? 'Hesyra Dental Clinic' : 'Smile Dental Care',
         due: 'Standard',
-        tech: 'Lab Technician',
+        tech: 'Meera Joshi',
         assignedTechId: techUser.id,
         assignedDesignerId: cadDesigner.id,
         doctorId: bc.doctor.id,

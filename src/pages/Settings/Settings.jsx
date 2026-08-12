@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { User, Building2, Bell, Shield, Save, Palette, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { User, Building2, Bell, Shield, Save, Palette, AlertCircle, CheckCircle2,
+  Truck, ClipboardCheck, Copy } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import styles from './Settings.module.css';
 
 const Settings = () => {
   const { user, changePassword, updateProfile } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('profile');
+  // Delivery and case preferences only mean anything for a clinic.
+  const isClinic = user?.role === 'clinic';
   
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [passMessage, setPassMessage] = useState({ type: '', text: '' });
@@ -29,6 +30,20 @@ const Settings = () => {
     scannerModel: user?.scannerModel || 'none',
   });
 
+  const [shipping, setShipping] = useState({
+    shippingAddress: user?.shippingAddress || '',
+    shippingCity: user?.shippingCity || '',
+    shippingState: user?.shippingState || '',
+    shippingPinCode: user?.shippingPinCode || '',
+    preferredCourier: user?.preferredCourier || '',
+    preferredContact: user?.preferredContact || 'phone',
+  });
+
+  const [workflow, setWorkflow] = useState({
+    preferredPaymentMode: user?.preferredPaymentMode || 'pay_on_go',
+    autoApproveDesigns: user?.autoApproveDesigns !== false,
+  });
+
   const [notifications, setNotifications] = useState({
     actionRequired: true,
     designApproval: true,
@@ -38,14 +53,48 @@ const Settings = () => {
 
   const [saveStatus, setSaveStatus] = useState({ loading: false, message: '', type: '' });
 
-  // Load preferences from JSON string if they exist
+  // Re-seed every form whenever the signed-in user resolves or changes.
+  // The initial useState values run once, before the session has been
+  // restored on a hard refresh — without this the page shows empty
+  // fields over perfectly good saved data, and saving blanks them.
   useEffect(() => {
-    if (user?.notificationPreferences) {
+    if (!user) return;
+
+    setProfile({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      licenseNumber: user.licenseNumber || '',
+    });
+
+    setClinic({
+      clinic: user.clinic || '',
+      clinicAddress: user.clinicAddress || '',
+      clinicCity: user.clinicCity || '',
+      clinicState: user.clinicState || '',
+      clinicPinCode: user.clinicPinCode || '',
+      scannerModel: user.scannerModel || 'none',
+    });
+
+    setShipping({
+      shippingAddress: user.shippingAddress || '',
+      shippingCity: user.shippingCity || '',
+      shippingState: user.shippingState || '',
+      shippingPinCode: user.shippingPinCode || '',
+      preferredCourier: user.preferredCourier || '',
+      preferredContact: user.preferredContact || 'phone',
+    });
+
+    setWorkflow({
+      preferredPaymentMode: user.preferredPaymentMode || 'pay_on_go',
+      autoApproveDesigns: user.autoApproveDesigns !== false,
+    });
+
+    if (user.notificationPreferences) {
       try {
-        const prefs = JSON.parse(user.notificationPreferences);
-        setNotifications(prev => ({ ...prev, ...prefs }));
-      } catch (e) {
-        console.error("Failed to parse notification preferences", e);
+        setNotifications(prev => ({ ...prev, ...JSON.parse(user.notificationPreferences) }));
+      } catch {
+        // A malformed blob should not wipe the defaults.
       }
     }
   }, [user]);
@@ -94,6 +143,40 @@ const Settings = () => {
     setTimeout(() => setSaveStatus({ loading: false, message: '', type: '' }), 3000);
   };
 
+  // One save path for every section — keeps the status handling and the
+  // "don't blank fields you didn't touch" behaviour identical.
+  const saveSection = async (payload, successText) => {
+    setSaveStatus({ loading: true, message: '', type: '' });
+    const result = await updateProfile(payload);
+    setSaveStatus({
+      loading: false,
+      message: result.success ? successText : result.message,
+      type: result.success ? 'success' : 'error',
+    });
+    setTimeout(() => setSaveStatus({ loading: false, message: '', type: '' }), 3000);
+    return result;
+  };
+
+  const handleSaveShipping = (e) => {
+    e.preventDefault();
+    return saveSection(shipping, 'Delivery details updated.');
+  };
+
+  const handleSaveWorkflow = (e) => {
+    e.preventDefault();
+    return saveSection(workflow, 'Case preferences updated.');
+  };
+
+  const copyClinicToShipping = () => {
+    setShipping(s => ({
+      ...s,
+      shippingAddress: clinic.clinicAddress,
+      shippingCity: clinic.clinicCity,
+      shippingState: clinic.clinicState,
+      shippingPinCode: clinic.clinicPinCode,
+    }));
+  };
+
   const handleSaveNotifications = async (e) => {
     e.preventDefault();
     setSaveStatus({ loading: true, message: '', type: '' });
@@ -137,11 +220,18 @@ const Settings = () => {
             <button className={`${styles.navItem} ${activeTab === 'clinic' ? styles.active : ''}`} onClick={() => setActiveTab('clinic')}>
               <Building2 size={18} /> Clinic Details
             </button>
+            {isClinic && (
+              <button className={`${styles.navItem} ${activeTab === 'shipping' ? styles.active : ''}`} onClick={() => setActiveTab('shipping')}>
+                <Truck size={18} /> Delivery
+              </button>
+            )}
+            {isClinic && (
+              <button className={`${styles.navItem} ${activeTab === 'workflow' ? styles.active : ''}`} onClick={() => setActiveTab('workflow')}>
+                <ClipboardCheck size={18} /> Case Preferences
+              </button>
+            )}
             <button className={`${styles.navItem} ${activeTab === 'notifications' ? styles.active : ''}`} onClick={() => setActiveTab('notifications')}>
               <Bell size={18} /> Notifications
-            </button>
-            <button className={`${styles.navItem} ${activeTab === 'preferences' ? styles.active : ''}`} onClick={() => setActiveTab('preferences')}>
-              <Palette size={18} /> Preferences
             </button>
             <button className={`${styles.navItem} ${activeTab === 'security' ? styles.active : ''}`} onClick={() => setActiveTab('security')}>
               <Shield size={18} /> Security
@@ -223,28 +313,157 @@ const Settings = () => {
               </form>
             )}
 
+            {activeTab === 'shipping' && isClinic && (
+              <form className={styles.section} onSubmit={handleSaveShipping}>
+                <h2 className={styles.sectionTitle}>Delivery Details</h2>
+                <p className={styles.sectionDesc}>
+                  Where finished cases are couriered. If this is blank the lab falls
+                  back to your clinic address.
+                </p>
+
+                <button type="button" className={styles.btnGhost} onClick={copyClinicToShipping}>
+                  <Copy size={14} /> Same as clinic address
+                </button>
+
+                <div className={styles.formGrid} style={{ marginTop: '1rem' }}>
+                  <div className={styles.inputGroupFull}>
+                    <label>Delivery Address</label>
+                    <input type="text" value={shipping.shippingAddress}
+                      placeholder="Street, building, landmark"
+                      onChange={e => setShipping({ ...shipping, shippingAddress: e.target.value })} />
+                  </div>
+                  <div className={styles.inputGroup}>
+                    <label>City</label>
+                    <input type="text" value={shipping.shippingCity}
+                      onChange={e => setShipping({ ...shipping, shippingCity: e.target.value })} />
+                  </div>
+                  <div className={styles.inputGroup}>
+                    <label>State &amp; PIN</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input type="text" value={shipping.shippingState} style={{ width: '70px' }}
+                        onChange={e => setShipping({ ...shipping, shippingState: e.target.value })} />
+                      <input type="text" value={shipping.shippingPinCode}
+                        onChange={e => setShipping({ ...shipping, shippingPinCode: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className={styles.inputGroup}>
+                    <label>Preferred Courier</label>
+                    <select value={shipping.preferredCourier}
+                      onChange={e => setShipping({ ...shipping, preferredCourier: e.target.value })}>
+                      <option value="">No preference — lab decides</option>
+                      <option value="BlueDart">BlueDart</option>
+                      <option value="DTDC">DTDC</option>
+                      <option value="Delhivery">Delhivery</option>
+                      <option value="Professional">Professional Couriers</option>
+                      <option value="Hesyra Rider">Hesyra rider (Nagpur only)</option>
+                    </select>
+                  </div>
+                  <div className={styles.inputGroup}>
+                    <label>Dispatch Updates Via</label>
+                    <select value={shipping.preferredContact}
+                      onChange={e => setShipping({ ...shipping, preferredContact: e.target.value })}>
+                      <option value="phone">Phone call</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="email">Email</option>
+                    </select>
+                  </div>
+                </div>
+                {renderSaveStatus()}
+                <div className={styles.formActions}>
+                  <button type="submit" className={styles.btnPrimary} disabled={saveStatus.loading}>
+                    <Save size={16} /> {saveStatus.loading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {activeTab === 'workflow' && isClinic && (
+              <form className={styles.section} onSubmit={handleSaveWorkflow}>
+                <h2 className={styles.sectionTitle}>Case Preferences</h2>
+                <p className={styles.sectionDesc}>
+                  How your cases are paid for, and what happens if a design is left
+                  waiting for your approval.
+                </p>
+
+                <div className={styles.settingBlock}>
+                  <div className={styles.settingLabel}>Payment method</div>
+                  <div className={styles.choiceList}>
+                    {[
+                      { id: 'pay_on_go', title: 'Pay per case',
+                        desc: 'A payment link is sent when the case passes QC. Nothing leaves the lab until it is paid.' },
+                      { id: 'wallet', title: 'Hesyra wallet',
+                        desc: 'Top up in advance and each case is deducted automatically — no link to chase, faster dispatch.' },
+                    ].map(opt => (
+                      <button key={opt.id} type="button"
+                        aria-pressed={workflow.preferredPaymentMode === opt.id}
+                        className={`${styles.choice} ${workflow.preferredPaymentMode === opt.id ? styles.choiceSelected : ''}`}
+                        onClick={() => setWorkflow({ ...workflow, preferredPaymentMode: opt.id })}>
+                        <span className={styles.choiceTitle}>{opt.title}</span>
+                        <span className={styles.choiceDesc}>{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.settingBlock}>
+                  <div className={styles.settingLabel}>If a design is left unapproved</div>
+                  <div className={styles.choiceList}>
+                    {[
+                      { id: true, title: 'Proceed automatically',
+                        desc: 'After the approval window closes we start production on the design as sent, so the case is not delayed. You are reminded twice before this happens.' },
+                      { id: false, title: 'Hold and escalate',
+                        desc: 'Nothing is ever approved on your behalf. The case waits and the lab manager chases you. Safer, but it will push your delivery date.' },
+                    ].map(opt => (
+                      <button key={String(opt.id)} type="button"
+                        aria-pressed={workflow.autoApproveDesigns === opt.id}
+                        className={`${styles.choice} ${workflow.autoApproveDesigns === opt.id ? styles.choiceSelected : ''}`}
+                        onClick={() => setWorkflow({ ...workflow, autoApproveDesigns: opt.id })}>
+                        <span className={styles.choiceTitle}>{opt.title}</span>
+                        <span className={styles.choiceDesc}>{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {renderSaveStatus()}
+                <div className={styles.formActions}>
+                  <button type="submit" className={styles.btnPrimary} disabled={saveStatus.loading}>
+                    <Save size={16} /> {saveStatus.loading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            )}
+
             {activeTab === 'notifications' && (
               <form className={styles.section} onSubmit={handleSaveNotifications}>
-                <h2 className={styles.sectionTitle}>Notification Preferences</h2>
-                <p className={styles.sectionDesc}>Choose how you want to be alerted about case updates.</p>
-                <div style={{display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px'}}>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" checked={notifications.actionRequired} onChange={e => setNotifications({...notifications, actionRequired: e.target.checked})} /> 
-                    Email me when a case is marked "Action Required"
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" checked={notifications.designApproval} onChange={e => setNotifications({...notifications, designApproval: e.target.checked})} /> 
-                    Email me when a digital design needs approval
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" checked={notifications.invoiceGenerated} onChange={e => setNotifications({...notifications, invoiceGenerated: e.target.checked})} /> 
-                    Email me when an invoice is generated
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '13px'}}>
-                    <input type="checkbox" checked={notifications.caseShippedSms} onChange={e => setNotifications({...notifications, caseShippedSms: e.target.checked})} /> 
-                    SMS text when a case ships
-                  </label>
+                <h2 className={styles.sectionTitle}>Alerts</h2>
+                <p className={styles.sectionDesc}>
+                  Which case events raise an alert in the portal. Turning one off
+                  stops that alert immediately.
+                </p>
+                <div className={styles.toggleList}>
+                  {[
+                    { key: 'actionRequired',   label: 'Case needs my attention',     desc: 'A case is marked Action Required and cannot move without you.' },
+                    { key: 'designApproval',   label: 'Design ready for approval',   desc: 'A CAD design is waiting on your clinical sign-off.' },
+                    { key: 'invoiceGenerated', label: 'Invoice issued',              desc: 'A GST invoice has been raised against one of your cases.' },
+                    { key: 'caseShipped',      label: 'Case dispatched',             desc: 'A finished case has left the lab, with courier and tracking.' },
+                  ].map(row => (
+                    <label key={row.key} className={styles.toggleRow}>
+                      <input type="checkbox"
+                        checked={notifications[row.key] !== false}
+                        onChange={e => setNotifications({ ...notifications, [row.key]: e.target.checked })} />
+                      <span className={styles.toggleBody}>
+                        <span className={styles.toggleLabel}>{row.label}</span>
+                        <span className={styles.toggleDesc}>{row.desc}</span>
+                      </span>
+                    </label>
+                  ))}
                 </div>
+                <p className={styles.sectionNote}>
+                  Email and SMS delivery is not switched on for this portal yet — these
+                  control in-portal alerts. Once a mail/SMS provider is configured the
+                  same preferences will drive it.
+                </p>
                 {renderSaveStatus()}
                 <div className={styles.formActions} style={{marginTop: '24px'}}>
                   <button type="submit" className={styles.btnPrimary} disabled={saveStatus.loading}>
@@ -252,26 +471,6 @@ const Settings = () => {
                   </button>
                 </div>
               </form>
-            )}
-
-            {activeTab === 'preferences' && (
-              <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>App Preferences</h2>
-                <div className={styles.formGrid}>
-                  <div className={styles.inputGroupFull}>
-                    <label>UI Theme</label>
-                    <select 
-                      value={theme} 
-                      onChange={(e) => setTheme(e.target.value)}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
-                    >
-                      <option value="brand">Brand Mode (Hesyra Default)</option>
-                      <option value="dark">Dark Mode (High Contrast)</option>
-                      <option value="light">Light Mode (Daytime)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
             )}
 
             {activeTab === 'security' && (

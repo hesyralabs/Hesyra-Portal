@@ -10,6 +10,7 @@ import {
   TrendingUp, Package, Clock, Zap, Filter, Eye, CreditCard, RefreshCw
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import CaseRecords from './CaseRecords';
 import styles from './SuperAdmin.module.css';
 
 // ─── Confirmation Modal Component ─────────────────────────────────
@@ -78,6 +79,58 @@ const SuperAdmin = () => {
   // ─── Navigation State ────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('overview');
   
+  // ─── Refetch trigger ─────────────────────────────────────────────
+  // Tabs were reloaded by calling setActiveTab('overview') then
+  // setActiveTab('wallets') back to back. React batches those, so
+  // activeTab never actually changes value and the fetch effect never
+  // re-runs — grants and bonuses saved correctly and then appeared not
+  // to, because the table still held stale rows.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refreshTab = () => setRefreshKey(k => k + 1);
+
+  // ─── Credit terms (admin-only) ───────────────────────────────────
+  // Setting a credit line moved off the manager's clinic page, and an
+  // admin cannot reach /manager/clinics — that route requires exactly
+  // the manager role — so the control lives here.
+  const [creditClinic, setCreditClinic] = useState(null);
+  const [creditMode, setCreditMode]     = useState('net_30');
+  const [creditLimit, setCreditLimit]   = useState('50000');
+  const [creditMsg, setCreditMsg]       = useState('');
+  const [creditBusy, setCreditBusy]     = useState(false);
+
+  const openCreditModal = (clinicUser) => {
+    setCreditClinic(clinicUser);
+    setCreditMode(clinicUser.billingMode === 'net_30' ? 'net_30' : 'prepaid');
+    setCreditLimit(String((clinicUser.creditLimitPaise || 5000000) / 100));
+    setCreditMsg('');
+  };
+
+  const saveCreditTerms = async () => {
+    if (!creditClinic) return;
+    setCreditBusy(true);
+    setCreditMsg('');
+    try {
+      const token = sessionStorage.getItem('hesyra_token');
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const res = await fetch(`${base}/api/manager/clinics/${creditClinic.id}/billing`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          billingMode: creditMode,
+          creditLimitPaise: creditMode === 'net_30' ? Math.round(parseFloat(creditLimit || 0) * 100) : 0,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setCreditMsg(d.error || 'Could not update billing terms.'); return; }
+      setCreditMsg('✓ Billing terms updated.');
+      setTimeout(() => { setCreditClinic(null); refreshTab(); }, 900);
+    } catch {
+      setCreditMsg('Network error.');
+    } finally {
+      setCreditBusy(false);
+    }
+  };
+
   // ─── IAM State ───────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -135,7 +188,7 @@ const SuperAdmin = () => {
     if (['paymentQueue', 'wallets', 'trust'].includes(activeTab)) {
       fetchData();
     }
-  }, [activeTab]);
+  }, [activeTab, refreshKey]);
 
   // ═══ Computed Data ═══════════════════════════════════════════════
   const totalRevenue = useMemo(() => invoices.filter(i => i.status === 'paid').reduce((a, b) => a + b.amount, 0), [invoices]);
@@ -362,6 +415,7 @@ const SuperAdmin = () => {
     { id: 'paymentQueue', label: 'Payment Queue', icon: Clock },
     { id: 'wallets', label: 'Hesyra Wallets', icon: CreditCard },
     { id: 'trust', label: 'Trust & Disputes', icon: Shield },
+    { id: 'records', label: 'Case Records', icon: FileText },
     { id: 'system', label: 'System', icon: Settings },
   ];
 
@@ -957,35 +1011,133 @@ const SuperAdmin = () => {
                       <th>Clinic</th>
                       <th>Trust Level</th>
                       <th>Available Balance (INR)</th>
+                      <th>Billing terms</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {adminWallets.map(w => (
+                    {adminWallets.map(w => {
+                      const isClinic = w.user.role === 'clinic';
+                      const net30 = w.user.billingMode === 'net_30';
+                      const limit = (w.user.creditLimitPaise || 0) / 100;
+                      const owed  = (w.user.outstandingPaise || 0) / 100;
+                      return (
                       <tr key={w.id}>
                         <td>{w.user.customId}</td>
                         <td>{w.user.name}</td>
                         <td>{w.user.clinic}</td>
                         <td><span className={styles.statusBadge} style={{background: w.user.trustLevel === 'clean' ? '#10b981' : '#ef4444'}}>{w.user.trustLevel}</span></td>
                         <td style={{fontWeight: 600}}>₹{(w.balancePaise / 100).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td>
+                        <td style={{fontSize: '0.78rem'}}>
+                          {/* Staff accounts carry wallet rows too, and
+                              billing terms mean nothing on them — the
+                              server 404s a non-clinic, so do not offer it. */}
+                          {!isClinic ? (
+                            <span style={{color: 'var(--text-tertiary)'}}>—</span>
+                          ) : net30 ? (
+                            <span style={{color: '#a78bfa'}}>
+                              Net-30 · ₹{owed.toLocaleString('en-IN')} of ₹{limit.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span style={{color: 'var(--text-tertiary)'}}>Prepaid</span>
+                          )}
+                        </td>
+                        <td style={{display: 'flex', gap: '6px'}}>
+                          {isClinic && (
+                            <button className={styles.btnGhost} onClick={() => openCreditModal(w.user)}>
+                              Credit terms
+                            </button>
+                          )}
                           <button className={styles.btnGhost} onClick={() => {
                             const amount = prompt('Enter bonus amount to grant (INR):');
                             if (amount && !isNaN(amount)) {
-                              adminAPI.grantBonus(w.userId, Math.round(parseFloat(amount) * 100), `Admin override grant for ${amount} INR`).then(() => setActiveTab('overview')).then(()=>setActiveTab('wallets'));
+                              adminAPI.grantBonus(w.userId, Math.round(parseFloat(amount) * 100), `Admin override grant for ${amount} INR`).then(refreshTab);
                             }
                           }}>
                             Grant Bonus
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    );})}
                     {adminWallets.length === 0 && !tabLoading && (
-                      <tr><td colSpan="6" className={styles.emptyText}>No active wallets found.</td></tr>
+                      <tr><td colSpan="7" className={styles.emptyText}>No active wallets found.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* ─── Credit terms modal (admin-only) ─────────────────── */}
+          {creditClinic && (
+            <div className={styles.modalOverlay} onClick={() => setCreditClinic(null)}>
+              <div className={styles.confirmModal} onClick={e => e.stopPropagation()} style={{textAlign: 'left', maxWidth: 440}}>
+                <h3 style={{marginBottom: 4}}>Billing terms</h3>
+                <p style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem'}}>
+                  {creditClinic.clinic || creditClinic.name} — currently{' '}
+                  <strong style={{color: creditClinic.billingMode === 'net_30' ? '#a78bfa' : 'var(--text-secondary)'}}>
+                    {creditClinic.billingMode === 'net_30' ? 'Net-30 credit' : 'Prepaid'}
+                  </strong>
+                </p>
+
+                {['strike_1', 'strike_2', 'suspended', 'banned'].includes(creditClinic.trustLevel) && creditMode === 'net_30' && (
+                  <div style={{background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '0.6rem 0.75rem', marginBottom: '0.9rem', fontSize: '0.78rem', color: '#fca5a5'}}>
+                    This clinic is <strong>{creditClinic.trustLevel}</strong>. The server refuses credit to accounts with strikes — resolve the account first.
+                  </div>
+                )}
+
+                <div style={{display: 'flex', gap: '0.5rem', marginBottom: '0.9rem'}}>
+                  {[['prepaid', 'Prepaid', 'Pays before dispatch'], ['net_30', 'Net-30 credit', 'Monthly invoice']].map(([id, label, sub]) => (
+                    <button key={id} onClick={() => setCreditMode(id)}
+                      style={{
+                        flex: 1, padding: '0.6rem', borderRadius: 8, cursor: 'pointer',
+                        border: `2px solid ${creditMode === id ? '#a78bfa' : 'rgba(255,255,255,0.1)'}`,
+                        background: creditMode === id ? 'rgba(167,139,250,0.1)' : 'transparent',
+                        color: creditMode === id ? '#a78bfa' : 'var(--text-secondary)',
+                        fontSize: '0.8rem', fontWeight: 600,
+                      }}>
+                      {label}<br /><span style={{fontSize: '0.68rem', fontWeight: 400, color: 'var(--text-tertiary)'}}>{sub}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {creditMode === 'net_30' && (
+                  <div style={{marginBottom: '0.9rem'}}>
+                    <label style={{fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem'}}>
+                      Credit limit (₹) — how much they may owe before new cases are blocked
+                    </label>
+                    <input type="number" min="5000" step="5000" value={creditLimit}
+                      onChange={e => setCreditLimit(e.target.value)}
+                      style={{width: '100%', padding: '0.55rem 0.7rem', borderRadius: 8, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', boxSizing: 'border-box'}} />
+                  </div>
+                )}
+
+                {creditMsg && (
+                  <div style={{fontSize: '0.8rem', marginBottom: '0.75rem', color: creditMsg.startsWith('✓') ? '#34d399' : '#f87171'}}>
+                    {creditMsg}
+                  </div>
+                )}
+
+                <div style={{display: 'flex', gap: '0.5rem'}}>
+                  <button className={styles.btnGhost} style={{flex: 1}} onClick={() => setCreditClinic(null)}>Cancel</button>
+                  <button className={styles.btnPrimary} style={{flex: 2}} onClick={saveCreditTerms} disabled={creditBusy}>
+                    {creditBusy ? 'Saving…' : creditMode === 'net_30' ? 'Grant Net-30 credit' : 'Set to prepaid'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════
+              TAB: CASE RECORDS — period statement, admin only
+          ══════════════════════════════════════════════════════════ */}
+          {activeTab === 'records' && (
+            <div className={styles.tabContent}>
+              <div className={styles.tabHeader}>
+                <h2>Case Records</h2>
+                <p>Every case in a period — including cancelled and archived — with the money as it was charged</p>
+              </div>
+              <CaseRecords />
             </div>
           )}
 
@@ -1025,10 +1177,10 @@ const SuperAdmin = () => {
                           {t.status === 'pending' ? (
                             <div style={{display: 'flex', gap: '8px'}}>
                               <button className={styles.btnPrimary} style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem'}} onClick={() => {
-                                strikesAPI.updateResolutionTicket(t.id, 'approved', 'Approved by Admin').then(() => setActiveTab('overview')).then(()=>setActiveTab('trust'));
+                                strikesAPI.updateResolutionTicket(t.id, 'approved', 'Approved by Admin').then(refreshTab);
                               }}>Approve</button>
                               <button className={styles.btnDanger} style={{padding: '0.25rem 0.5rem', fontSize: '0.75rem'}} onClick={() => {
-                                strikesAPI.updateResolutionTicket(t.id, 'rejected', 'Rejected by Admin').then(() => setActiveTab('overview')).then(()=>setActiveTab('trust'));
+                                strikesAPI.updateResolutionTicket(t.id, 'rejected', 'Rejected by Admin').then(refreshTab);
                               }}>Reject</button>
                             </div>
                           ) : (

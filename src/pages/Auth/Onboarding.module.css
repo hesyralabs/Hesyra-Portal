@@ -517,31 +517,3 @@
   }
 }
 
-/* ─── Light Mode Overrides ─── */
-:global(.light-mode) .card {
-  background: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 40px 100px rgba(0, 26, 51, 0.12);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-:global(.light-mode) .inputGroup input,
-:global(.light-mode) .inputGroup select,
-:global(.light-mode) .inputGroupFull input,
-:global(.light-mode) .inputGroupFull select {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(0, 26, 51, 0.08);
-}
-
-:global(.light-mode) .btnNext,
-:global(.light-mode) .successBtn {
-  background: var(--brand-azure);
-  color: #fff;
-}
-
-:global(.light-mode) .pill {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-:global(.light-mode) .toggleRow {
-  background: rgba(0, 0, 0, 0.03);
-}

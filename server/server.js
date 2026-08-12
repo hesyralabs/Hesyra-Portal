@@ -21,6 +21,8 @@ const auditRoutes   = require('./routes/audit');
 const poolRoutes    = require('./routes/pool');
 const batchRoutes   = require('./routes/batch');
 const catalogRoutes = require('./routes/catalog');
+const scanDayRoutes = require('./routes/scanday');
+const recordRoutes  = require('./routes/records');
 
 // Scheduler
 const { startScheduler } = require('./lib/strikeScheduler');
@@ -61,6 +63,8 @@ app.use('/api/audit',    auditRoutes);
 app.use('/api/pool',     poolRoutes);
 app.use('/api/batch',    batchRoutes);
 app.use('/api/catalog',  catalogRoutes);
+app.use('/api/scan-day', scanDayRoutes);
+app.use('/api/records',  recordRoutes);
 
 // ─── WebSocket ────────────────────────────────────────────────
 io.on('connection', (socket) => {

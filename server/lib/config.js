@@ -17,6 +17,45 @@ module.exports = {
   WALLET_BONUS_AMOUNT_PAISE:   50000,    // ₹500 bonus credit
   WALLET_BONUS_ENABLED:        true,     // Toggle by admin
 
+  // ─── Doctor design approval SLA ───────────────────────────
+  // How long the ordering doctor has to sign off on a CAD design before
+  // the case resolves itself. Kept short — the lab bench is idle while
+  // this clock runs, and a crown that waits days for a click is the most
+  // common cause of a blown turnaround promise.
+  DESIGN_APPROVAL_SLA_HOURS:          24,
+  DESIGN_APPROVAL_SLA_HOURS_PRIORITY: 6,   // Express cases
+  // Fractions of the window at which the doctor gets nudged (0.25 = 6h
+  // into a 24h window). Reminders stop once they act.
+  DESIGN_APPROVAL_REMINDER_POINTS:    [0.25, 0.75],
+
+  // ─── Work that never auto-approves ────────────────────────
+  // A clinic can opt in to auto-approval so an unanswered design keeps
+  // moving. These two carve-outs override that preference, because the
+  // cost of printing something the doctor never looked at is not
+  // symmetric with the cost of a day's delay.
+  //
+  // A surgical guide drills into bone against a plan — a wrong one is a
+  // misplaced implant, not a remake. Above the value ceiling, a remake
+  // is expensive enough that a human should look first. Neither is
+  // abandoned: both escalate to the lab manager instead.
+  AUTO_APPROVE_EXCLUDED_CASE_TYPES: ['surgical_guide'],
+  AUTO_APPROVE_MAX_VALUE_PAISE:     2000000,   // ₹20,000 incl. GST
+
+  // ─── Ceramic finishing ────────────────────────────────────
+  // Which case types pass the ceramist's bench after printing.
+  //
+  // This used to be decided by `finishingTier === 'premium'` alone —
+  // the Signature Match upsell — so a lab that had never sold one saw
+  // every case route straight to QC and the ceramist queue stayed
+  // permanently empty. Tier decides how MUCH finishing (hand-stained
+  // characterisation vs. studio glaze and polish), not WHETHER there is
+  // any: a printed zirconia crown needs glazing before QC either way.
+  //
+  // Everything absent from this list is thermoformed, printed or milled
+  // plastic with no ceramic stage — aligners, retainers, splints,
+  // surgical guides, space maintainers — and goes print → QC → pack.
+  CERAMIC_FINISHING_CASE_TYPES: ['crown_bridge', 'veneer', 'denture', 'inlay_onlay'],
+
   // ─── Strike system ────────────────────────────────────────
   STRIKE_DAYS_THRESHOLD:  7,    // Days after READY before strike
   REMINDER_DAYS:          [2, 5, 6], // Days to send reminders
@@ -24,7 +63,9 @@ module.exports = {
   PERMANENT_BAN_STRIKES:  6,    // Second suspension = permanent ban
 
   // ─── GST & Invoice ────────────────────────────────────────
-  GST_RATE:       0.12,        // 12%
+  // Published prices are exclusive of GST; 5% is added on top.
+  // (Hesyra Introductory Price List, July 2026.)
+  GST_RATE:       0.05,        // 5%
   HSN_CODE:       '9021',      // Dental prosthetics
   HESYRA_GSTIN:   '27XXXXX0000X1Z5', // Placeholder — set in production
 

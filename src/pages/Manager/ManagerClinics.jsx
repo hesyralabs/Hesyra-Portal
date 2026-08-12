@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   AlertTriangle, CheckCircle, Ban, ShieldAlert,
-  CreditCard, X, TrendingUp,
+  CreditCard,
 } from 'lucide-react';
 import styles from './ManagerClinics.module.css';
 
@@ -23,13 +23,6 @@ const ManagerClinics = () => {
   const [expanded, setExpanded]         = useState(null);
   const [wallet, setWallet]             = useState({});
   const [walletLoading, setWalletLoading] = useState({});
-
-  // Billing modal state
-  const [billingModal, setBillingModal] = useState(null); // clinic object | null
-  const [billingMode, setBillingMode]   = useState('net_30');
-  const [creditLimitINR, setCreditLimitINR] = useState('50000');
-  const [billingLoading, setBillingLoading] = useState(false);
-  const [billingMsg, setBillingMsg]     = useState('');
 
   const token = sessionStorage.getItem('hesyra_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -57,48 +50,6 @@ const ManagerClinics = () => {
         setWallet(p => ({ ...p, [clinicId]: data }));
       } catch {}
       setWalletLoading(p => ({ ...p, [clinicId]: false }));
-    }
-  };
-
-  const openBillingModal = (clinic, e) => {
-    e.stopPropagation();
-    setBillingModal(clinic);
-    setBillingMode(clinic.billingMode === 'net_30' ? 'prepaid' : 'net_30');
-    setCreditLimitINR('50000');
-    setBillingMsg('');
-  };
-
-  const saveBilling = async () => {
-    if (!billingModal) return;
-    setBillingLoading(true);
-    setBillingMsg('');
-    try {
-      const body = {
-        billingMode,
-        creditLimitPaise: billingMode === 'net_30' ? Math.round(parseFloat(creditLimitINR) * 100) : 0,
-      };
-      const res = await fetch(`${API}/api/manager/clinics/${billingModal.id}/billing`, {
-        method: 'PUT',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setBillingMsg('✓ Billing terms updated.');
-        // Update local state so table refreshes instantly
-        setClinics(prev => prev.map(c =>
-          c.id === billingModal.id
-            ? { ...c, billingMode: body.billingMode, creditLimitPaise: body.creditLimitPaise }
-            : c
-        ));
-        setTimeout(() => setBillingModal(null), 1200);
-      } else {
-        setBillingMsg(`Error: ${data.error}`);
-      }
-    } catch {
-      setBillingMsg('Network error.');
-    } finally {
-      setBillingLoading(false);
     }
   };
 
@@ -226,15 +177,12 @@ const ManagerClinics = () => {
                     <div className={styles.colJoin}>
                       {new Date(clinic.joinDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
                     </div>
+                    {/* Setting a credit line is an admin decision — it
+                        determines how much a clinic may owe. The button
+                        was here and the endpoint now refuses managers,
+                        so showing it would only produce a 403.
+                        Admin → Hesyra Wallets → Credit terms. */}
                     <div className={styles.colExpand} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                      <button
-                        className={styles.billingBtn}
-                        title={isNet30 ? 'Manage credit terms' : 'Grant credit terms'}
-                        onClick={e => openBillingModal(clinic, e)}
-                        style={{ color: isNet30 ? '#a78bfa' : '#64748b' }}
-                      >
-                        <CreditCard size={14} />
-                      </button>
                       {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     </div>
                   </div>
@@ -253,14 +201,21 @@ const ManagerClinics = () => {
                               <span>Balance</span>
                               <strong>₹{(w.balancePaise / 100).toLocaleString('en-IN')}</strong>
                             </div>
-                            <div className={styles.wStat}>
-                              <span>Total Loaded</span>
-                              <strong>₹{(w.totalLoadedPaise / 100).toLocaleString('en-IN')}</strong>
-                            </div>
-                            <div className={styles.wStat}>
-                              <span>Total Spent</span>
-                              <strong>₹{(w.totalSpentPaise / 100).toLocaleString('en-IN')}</strong>
-                            </div>
+                            {/* Lifetime loaded/spent are admin-only — a
+                                dispatch decision needs the standing, not
+                                the history. The server withholds them. */}
+                            {w.totalLoadedPaise !== undefined && (
+                              <div className={styles.wStat}>
+                                <span>Total Loaded</span>
+                                <strong>₹{(w.totalLoadedPaise / 100).toLocaleString('en-IN')}</strong>
+                              </div>
+                            )}
+                            {w.totalSpentPaise !== undefined && (
+                              <div className={styles.wStat}>
+                                <span>Total Spent</span>
+                                <strong>₹{(w.totalSpentPaise / 100).toLocaleString('en-IN')}</strong>
+                              </div>
+                            )}
                             {isNet30 && (
                               <>
                                 <div className={styles.wStat}>
@@ -275,7 +230,11 @@ const ManagerClinics = () => {
                                 </div>
                               </>
                             )}
-                            <div className={styles.wReadOnly}>Read-only · Manager view</div>
+                            <div className={styles.wReadOnly}>
+                              {w.ledgerHidden
+                                ? 'Credit standing · transaction history is admin-only'
+                                : 'Read-only · Manager view'}
+                            </div>
                           </div>
                           {w.transactions?.length > 0 && (
                             <div className={styles.txList}>
@@ -303,99 +262,6 @@ const ManagerClinics = () => {
         </div>
       </div>
 
-      {/* ── Billing modal ── */}
-      {billingModal && (
-        <div className={styles.modalOverlay} onClick={() => setBillingModal(null)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <button className={styles.modalClose} onClick={() => setBillingModal(null)}><X size={18} /></button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <TrendingUp size={18} style={{ color: '#a78bfa' }} />
-              <h2 className={styles.modalTitle}>Billing Terms</h2>
-            </div>
-            <p className={styles.modalSub}>
-              <strong>{billingModal.clinic || billingModal.name}</strong> — currently{' '}
-              <span style={{ color: billingModal.billingMode === 'net_30' ? '#a78bfa' : '#64748b', fontWeight: 600 }}>
-                {billingModal.billingMode === 'net_30' ? 'Net-30 Credit' : 'Prepaid'}
-              </span>
-            </p>
-
-            {['strike_1', 'strike_2', 'suspended', 'banned'].includes(billingModal.trustLevel) && billingMode === 'net_30' && (
-              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '0.6rem 0.8rem', marginBottom: '1rem', fontSize: '0.78rem', color: '#fca5a5' }}>
-                ⚠️ This clinic has trust level <strong>{billingModal.trustLevel}</strong>. Credit cannot be granted to accounts with strikes or restrictions.
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <button
-                onClick={() => setBillingMode('prepaid')}
-                style={{
-                  flex: 1, padding: '0.6rem', borderRadius: 8, border: `2px solid ${billingMode === 'prepaid' ? '#60a5fa' : 'rgba(255,255,255,0.1)'}`,
-                  background: billingMode === 'prepaid' ? 'rgba(96,165,250,0.1)' : 'transparent',
-                  color: billingMode === 'prepaid' ? '#60a5fa' : '#94a3b8', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600,
-                }}
-              >
-                Prepaid<br /><span style={{ fontSize: '0.68rem', fontWeight: 400, color: '#64748b' }}>Pay before dispatch</span>
-              </button>
-              <button
-                onClick={() => setBillingMode('net_30')}
-                style={{
-                  flex: 1, padding: '0.6rem', borderRadius: 8, border: `2px solid ${billingMode === 'net_30' ? '#a78bfa' : 'rgba(255,255,255,0.1)'}`,
-                  background: billingMode === 'net_30' ? 'rgba(167,139,250,0.1)' : 'transparent',
-                  color: billingMode === 'net_30' ? '#a78bfa' : '#94a3b8', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600,
-                }}
-              >
-                Net-30 Credit<br /><span style={{ fontSize: '0.68rem', fontWeight: 400, color: '#64748b' }}>Monthly invoice</span>
-              </button>
-            </div>
-
-            {billingMode === 'net_30' && (
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem' }}>
-                  Credit Limit (₹)
-                </label>
-                <input
-                  type="number"
-                  min="5000"
-                  step="5000"
-                  value={creditLimitINR}
-                  onChange={e => setCreditLimitINR(e.target.value)}
-                  placeholder="e.g. 50000"
-                  style={{
-                    width: '100%', padding: '0.55rem 0.75rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.04)', color: '#f8fafc', fontSize: '0.9rem', boxSizing: 'border-box',
-                  }}
-                />
-                <p style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.3rem' }}>
-                  They can accumulate up to ₹{parseFloat(creditLimitINR || 0).toLocaleString('en-IN')} in unpaid dispatches before new cases are blocked.
-                </p>
-              </div>
-            )}
-
-            {billingMsg && (
-              <div style={{ fontSize: '0.8rem', color: billingMsg.startsWith('✓') ? '#34d399' : '#f87171', marginBottom: '0.75rem' }}>
-                {billingMsg}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => setBillingModal(null)} style={{ flex: 1, padding: '0.55rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.82rem' }}>
-                Cancel
-              </button>
-              <button
-                onClick={saveBilling}
-                disabled={billingLoading}
-                style={{
-                  flex: 2, padding: '0.55rem', borderRadius: 8, border: 'none',
-                  background: billingMode === 'net_30' ? '#7c3aed' : '#334155',
-                  color: '#fff', cursor: billingLoading ? 'not-allowed' : 'pointer', fontSize: '0.82rem', fontWeight: 600, opacity: billingLoading ? 0.7 : 1,
-                }}
-              >
-                {billingLoading ? 'Saving…' : billingMode === 'net_30' ? '✓ Grant Net-30 Credit' : '↩ Downgrade to Prepaid'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

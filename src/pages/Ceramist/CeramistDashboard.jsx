@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Paintbrush, Star, Clock, CheckCircle, Package, Search } from 'lucide-react';
+import { Paintbrush, Star, CheckCircle, Package, Search, RefreshCw } from 'lucide-react';
 import Skeleton from '../../components/UI/Skeleton';
 import { useAuth } from '../../context/AuthContext';
 import styles from './CeramistDashboard.module.css';
@@ -12,19 +12,26 @@ const CeramistDashboard = () => {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
+  // Releasing to QC cannot be undone from this screen, so it asks first.
+  const [confirming, setConfirming] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const token = sessionStorage.getItem('hesyra_token');
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await fetch(`${API}/api/batch/ceramist/queue`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Could not load your queue.'); return; }
       setCases(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch queue:', err);
+      setError('Could not reach the server. Your queue may be out of date.');
     } finally {
       setLoading(false);
     }
@@ -35,18 +42,38 @@ const CeramistDashboard = () => {
   const filtered = cases.filter(c => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return c.id?.toLowerCase().includes(q) || c.shade?.toLowerCase().includes(q) || c.material?.toLowerCase().includes(q);
+    return c.id?.toLowerCase().includes(q)
+      || c.patient?.toLowerCase().includes(q)
+      || c.clinic?.toLowerCase().includes(q)
+      || c.shade?.toLowerCase().includes(q)
+      || c.material?.toLowerCase().includes(q);
   });
 
+  const priorityCount  = cases.filter(c => c.priorityFlag).length;
+  const signatureCount = cases.filter(c => c.finishingTier === 'premium').length;
+
+  // Previously: a failure was swallowed and the card simply stayed put,
+  // which reads as an unresponsive button rather than a refusal.
   const handleComplete = async (caseCustomId) => {
+    setBusyId(caseCustomId);
+    setError('');
     try {
       const res = await fetch(`${API}/api/batch/ceramist/complete/${caseCustomId}`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
-      if (res.ok) fetchQueue();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || `Could not release ${caseCustomId} to QC.`);
+        return;
+      }
+      setConfirming(null);
+      await fetchQueue();
     } catch (err) {
       console.error(err);
+      setError('The server could not be reached — nothing was changed.');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -60,13 +87,28 @@ const CeramistDashboard = () => {
           </h1>
           <p className={styles.subtitle}>
             Welcome, <strong>{user?.name}</strong> · {cases.length} case{cases.length !== 1 ? 's' : ''} awaiting finishing
+            {priorityCount > 0 && <> · <span style={{ color: '#fbbf24' }}>{priorityCount} priority</span></>}
+            {signatureCount > 0 && <> · {signatureCount} Signature Match</>}
           </p>
         </div>
-        <div className={styles.searchBox}>
-          <Search size={14} />
-          <input placeholder="Search shade, material…" value={search} onChange={e => setSearch(e.target.value)} />
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <div className={styles.searchBox}>
+            <Search size={14} />
+            <input placeholder="Case, patient, shade…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button className={styles.btnOutline} onClick={fetchQueue} title="Refresh queue"
+            style={{ padding: '0.45rem 0.6rem' }}>
+            <RefreshCw size={14} />
+          </button>
         </div>
       </header>
+
+      {error && (
+        <div style={{ padding: '0.7rem 0.9rem', borderRadius: 10, marginBottom: '0.75rem', fontSize: '0.8rem',
+                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', color: '#fca5a5' }}>
+          {error}
+        </div>
+      )}
 
       <div className={styles.queue}>
         {loading ? (
@@ -88,7 +130,18 @@ const CeramistDashboard = () => {
                 <span className={styles.caseType}>{c.type || c.caseType?.replace(/_/g, ' ')}</span>
               </div>
 
+              {/* The queue endpoint already returned patient and clinic;
+                  the card showed neither, so a ceramist could not tell
+                  two identical-looking crowns apart. */}
               <div className={styles.rxRow}>
+                <div className={styles.rxChip}>
+                  <span className={styles.rxLabel}>Patient</span>
+                  <span className={styles.rxValue}>{c.patient || '—'}</span>
+                </div>
+                <div className={styles.rxChip}>
+                  <span className={styles.rxLabel}>Clinic</span>
+                  <span className={styles.rxValue}>{c.clinic || '—'}</span>
+                </div>
                 <div className={styles.rxChip}>
                   <span className={styles.rxLabel}>Material</span>
                   <span className={styles.rxValue}>{c.material || '—'}</span>
@@ -152,9 +205,25 @@ const CeramistDashboard = () => {
                     <Package size={14} /> View Design
                   </a>
                 )}
-                <button className={styles.btnPrimary} onClick={() => handleComplete(c.id)}>
-                  <CheckCircle size={14} /> Finishing Complete → QC
-                </button>
+                {confirming === c.id ? (
+                  <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                      Release to QC? You cannot take it back.
+                    </span>
+                    <button className={styles.btnOutline} onClick={() => setConfirming(null)}>
+                      Cancel
+                    </button>
+                    <button className={styles.btnPrimary}
+                      disabled={busyId === c.id}
+                      onClick={() => handleComplete(c.id)}>
+                      {busyId === c.id ? 'Releasing…' : 'Yes, release'}
+                    </button>
+                  </span>
+                ) : (
+                  <button className={styles.btnPrimary} onClick={() => setConfirming(c.id)}>
+                    <CheckCircle size={14} /> Finishing Complete → QC
+                  </button>
+                )}
               </div>
             </div>
           ))

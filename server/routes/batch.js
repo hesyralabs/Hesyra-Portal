@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const prisma = require('../lib/prisma');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { logAudit, AUDIT_ACTIONS } = require('../lib/auditLogger');
+const config = require('../lib/config');
 
 const router = express.Router();
 router.use(authenticate);
@@ -217,28 +219,94 @@ router.put('/:id/complete', requireRole('technician'), async (req, res) => {
       return res.status(400).json({ error: `Cannot complete batch in '${batch.status}' status` });
     }
 
+    // Split by what the appliance is made of, not by which upsell was
+    // bought. See CERAMIC_FINISHING_CASE_TYPES in lib/config.
+    const ceramicTypes = config.CERAMIC_FINISHING_CASE_TYPES || [];
+    const needsFinishing = batch.cases.filter(c => ceramicTypes.includes(c.caseType));
+    const straightToQc   = batch.cases.filter(c => !ceramicTypes.includes(c.caseType));
+
+    // Pick the ceramist with the lightest bench so the work actually
+    // moves. Parking cases on `printed` and waiting for someone to
+    // remember to assign them is how they went missing: nothing in the
+    // portal surfaced a case in that state, and the ceramist's queue
+    // only ever shows `finishing`.
+    let assignee = null;
+    if (needsFinishing.length) {
+      const ceramists = await prisma.user.findMany({
+        where: { role: 'ceramist', status: 'active' },
+        select: { id: true, name: true, username: true },
+      });
+      if (ceramists.length) {
+        const loads = await prisma.case.groupBy({
+          by: ['assignedCeramistId'],
+          where: { status: 'finishing', assignedCeramistId: { in: ceramists.map(c => c.id) } },
+          _count: true,
+        });
+        const loadById = Object.fromEntries(loads.map(l => [l.assignedCeramistId, l._count]));
+        assignee = ceramists.reduce((best, c) =>
+          (loadById[c.id] || 0) < (loadById[best.id] || 0) ? c : best, ceramists[0]);
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.printBatch.update({
         where: { id: batch.id },
-        data: { status: 'printed', completedAt: new Date() },
+        // Nothing left to assign by hand once the bench is allocated.
+        data: { status: assignee ? 'completed' : 'printed', completedAt: new Date() },
       });
 
-      await tx.case.updateMany({
-        where: { printBatchId: batch.id },
-        data: { status: 'printed' },
-      });
+      if (straightToQc.length) {
+        await tx.case.updateMany({
+          where: { id: { in: straightToQc.map(c => c.id) } },
+          data: { status: 'qa' },
+        });
+      }
 
-      const entries = batch.cases.map(c => ({
-        caseId: c.id,
-        label: '✅ Print complete — awaiting ceramist',
-      }));
+      if (needsFinishing.length) {
+        await tx.case.updateMany({
+          where: { id: { in: needsFinishing.map(c => c.id) } },
+          data: assignee
+            ? { status: 'finishing', assignedCeramistId: assignee.id }
+            : { status: 'printed' },   // no ceramist on staff — see below
+        });
+      }
+
+      const who = assignee ? `${assignee.name} (${assignee.username})` : null;
+      const entries = [
+        ...straightToQc.map(c => ({
+          caseId: c.id,
+          label: '✅ Print complete — sent to QC',
+          info: 'No ceramic finishing stage for this appliance.',
+        })),
+        ...needsFinishing.map(c => ({
+          caseId: c.id,
+          label: who
+            ? `🎨 Print complete — assigned to ${who} for finishing`
+            : '⚠️ Print complete — waiting for a ceramist',
+          info: who
+            ? (c.finishingTier === 'premium'
+                ? 'Signature Match: hand-stained characterisation.'
+                : 'Studio finish: glaze and polish.')
+            : 'No active ceramist account. Assign one from the print floor to release this case.',
+        })),
+      ];
       await tx.timeline.createMany({ data: entries });
     });
 
     const io = req.app.get('io');
-    if (io) io.emit('batch:completed', { batchId: batch.customId });
+    if (io) {
+      io.emit('batch:completed', { batchId: batch.customId });
+      if (assignee) io.emit('ceramist:assigned', { ceramistId: assignee.id, count: needsFinishing.length });
+    }
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      toFinishing: needsFinishing.length,
+      toQc: straightToQc.length,
+      assignedTo: assignee ? assignee.name : null,
+      // True only in the edge case where the lab has no active ceramist.
+      awaitingCeramist: !assignee && needsFinishing.length > 0,
+    });
   } catch (err) {
     console.error('PUT /batch/:id/complete error:', err);
     res.status(500).json({ error: 'Failed to complete batch' });
@@ -408,6 +476,16 @@ router.put('/ceramist/complete/:caseCustomId', requireRole('ceramist'), async (r
       return res.status(400).json({ error: 'Case is not in finishing status' });
     }
 
+    // The JWT carries id, role and email but no display name, so this
+    // wrote "Ceramist: undefined" onto the case timeline.
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { name: true, username: true },
+    });
+    const whoAmI = me?.name
+      ? `${me.name}${me.username ? ` (${me.username})` : ''}`
+      : req.user.email || 'ceramist';
+
     await prisma.case.update({
       where: { id: c.id },
       data: { status: 'qa' },
@@ -416,8 +494,22 @@ router.put('/ceramist/complete/:caseCustomId', requireRole('ceramist'), async (r
       data: {
         caseId: c.id,
         label: `🎨 Finishing complete — sent to QC`,
-        info: `Ceramist: ${req.user.name}`,
+        info: `Ceramist: ${whoAmI}`,
       },
+    });
+
+    // Finishing is a production handoff that was leaving no audit row:
+    // this route bypasses PUT /cases/:id/status, so the case moved
+    // bench-to-bench with nothing recording who released it.
+    await logAudit({
+      req,
+      action:     AUDIT_ACTIONS.CASE_STATUS_CHANGE,
+      entityType: 'case',
+      entityId:   c.id,
+      beforeState:{ status: 'finishing' },
+      afterState: { status: 'qa' },
+      reason:     `Ceramic finishing completed by ${whoAmI}`,
+      metadata:   { customId: c.customId, finishingTier: c.finishingTier },
     });
 
     const io = req.app.get('io');
@@ -429,6 +521,56 @@ router.put('/ceramist/complete/:caseCustomId', requireRole('ceramist'), async (r
   } catch (err) {
     console.error('PUT /batch/ceramist/complete error:', err);
     res.status(500).json({ error: 'Failed to complete finishing' });
+  }
+});
+
+// GET /api/batch/ceramist/completed — What this ceramist has finished
+// Once a case leaves `finishing` it vanished from the only screen a
+// ceramist had, so there was no way to confirm a piece was released, or
+// to look up what was done last week when QC sends something back.
+router.get('/ceramist/completed', requireRole('ceramist'), async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 180);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const cases = await prisma.case.findMany({
+      where: {
+        assignedCeramistId: req.user.id,
+        status: { not: 'finishing' },   // anything past this bench
+        updatedAt: { gte: since },
+      },
+      include: {
+        doctor: { select: { name: true, clinic: true } },
+        // The handoff entry this ceramist wrote when releasing it.
+        timeline: {
+          where: { label: { contains: 'Finishing complete' } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+
+    res.json(cases.map(c => ({
+      id: c.customId,
+      patient: c.patient,
+      caseType: c.caseType,
+      type: c.type,
+      material: c.material,
+      shade: c.shade,
+      finishingTier: c.finishingTier || 'standard',
+      priorityFlag: c.priorityFlag,
+      clinic: c.doctor?.clinic || c.doctor?.name,
+      status: c.status,
+      // Null when the case was moved on by someone else rather than
+      // released from this bench — worth being able to tell apart.
+      finishedAt: c.timeline[0]?.createdAt || null,
+      dispatchedAt: c.dispatchedAt,
+    })));
+  } catch (err) {
+    console.error('GET /batch/ceramist/completed error:', err);
+    res.status(500).json({ error: 'Failed to load completed work' });
   }
 });
 

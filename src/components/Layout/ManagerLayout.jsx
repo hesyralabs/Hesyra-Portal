@@ -2,16 +2,14 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   LogOut, LayoutDashboard, Users, Ticket, BarChart3,
-  Sun, Moon, Settings as SettingsIcon, AlertTriangle, ClipboardList, Package
+  Settings as SettingsIcon, AlertTriangle, ClipboardList, Package, ScanLine
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import styles from './ManagerLayout.module.css';
 
 const ManagerLayout = () => {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -23,6 +21,7 @@ const ManagerLayout = () => {
     { to: '/manager/workload', label: 'Team Workload',       icon: BarChart3 },
     { to: '/manager/clinics',  label: 'Clinic Accounts',     icon: Users },
     { to: '/manager/catalog',  label: 'Material Catalog',    icon: Package },
+    { to: '/manager/scan-day', label: 'Scan Day',            icon: ScanLine },
     { to: '/manager/tickets',  label: 'Support Tickets',     icon: Ticket },
   ];
 
@@ -56,12 +55,6 @@ const ManagerLayout = () => {
               );
             })}
 
-            <div className={styles.navSeparator}>Preferences</div>
-
-            <button className={styles.navItem} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-            </button>
           </nav>
         </div>
 

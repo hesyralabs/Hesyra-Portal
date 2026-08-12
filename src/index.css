@@ -41,55 +41,28 @@
 
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  /* ─── Semantic status colours ─────────────────────────────────
+     These four used to live ONLY in the light theme, so every rule
+     referencing them resolved to nothing the rest of the time — a
+     completed timeline dot had no fill and the case-detail status
+     badge had no text colour. They are part of the brand palette now.
+
+     The values are the ones already hardcoded across the app
+     (#60a5fa / #fbbf24 / #34d399 / #f87171), so a component can use
+     the token and match everything around it instead of guessing. */
+  --status-info-text:    #60a5fa;
+  --status-warning-text: #fbbf24;
+  --status-success-text: #34d399;
+  --status-danger-text:  #f87171;
 }
 
-:root.dark-mode {
-  --bg-base: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-deep: #020617;
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  
-  --glass-bg: rgba(30, 41, 59, 0.65);
-  --glass-bg-hover: rgba(30, 41, 59, 0.85);
-  --glass-border: rgba(148, 163, 184, 0.1);
-  --glass-border-strong: rgba(148, 163, 184, 0.2);
-}
-
-:root.light-mode {
-  --bg-base: #e2e8f0; /* Slightly darker grey for pure white cards to pop */
-  --bg-surface: #ffffff;
-  --bg-deep: #cbd5e1;
-
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-tertiary: #475569;
-
-  --glass-bg: #ffffff;
-  --glass-bg-hover: #f1f5f9;
-  --glass-border: #cbd5e1;
-  --glass-border-strong: #94a3b8;
-
-  --blur-heavy: none; /* No blur in light mode to keep it crisp */
-  --blur-light: none;
-
-  --status-draft: #94a3b8;
-  --status-submitted: #0284c7; /* High contrast blue */
-  --status-designing: #d97706; /* High contrast amber */
-  --status-milling: #7c3aed;   /* High contrast purple */
-  --status-shipped: #16a34a;   /* High contrast green */
-  
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-
-  /* Semantic Status Text (High Contrast) */
-  --status-info-text: #1d4ed8;
-  --status-warning-text: #b45309;
-  --status-success-text: #15803d;
-  --status-danger-text: #b91c1c;
-}
+/* There is one theme. The portal previously shipped three — a brand
+   theme on :root plus generic .dark-mode and .light-mode overrides —
+   and the toggle only ever flipped between dark and light, so the
+   moment anyone pressed it the brand palette became unreachable
+   without clearing localStorage. A user whose OS preferred light never
+   saw the brand at all, because the provider defaulted to it. */
 
 * {
   box-sizing: border-box;

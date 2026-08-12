@@ -12,7 +12,8 @@ const STATUS_LABEL = {
   draft: 'Draft', 
   submitted: 'Submitted — Awaiting Lab', 
   cad_assigned: 'In Design (CAD)',
-  design_ready: 'Design Under Review',
+  design_ready: 'Design Under Lab Review',
+  awaiting_doctor_approval: 'Awaiting Your Approval',
   design_revision: 'Design Revision in Progress',
   design_approved: 'Design Approved — Production Starting',
   designing: 'Designing (CAD)',
@@ -33,11 +34,25 @@ const STATUS_LABEL = {
   cancelled: 'Cancelled',
 };
 
+// Mirrors the dashboard's pipeline model so both views describe
+// progress identically.
+const STAGES = ['Submitted', 'Design', 'Approved', 'Production', 'Dispatched'];
+const STAGE_OF = {
+  draft: 0, submitted: 0, action_required: 0,
+  cad_assigned: 1, designing: 1, design_ready: 1, design_revision: 1, blocked: 1,
+  awaiting_doctor_approval: 1, pending_approval: 1,
+  design_approved: 2,
+  batched: 3, printing: 3, printed: 3, finishing: 3, post_processing: 3, qa: 3,
+  ready_for_dispatch: 3, payment_pending: 3, overdue: 3, packaged: 3,
+  dispatched: 4, shipped: 4, completed: 4,
+};
+
 const STATUS_COLOR = {
   draft: '#94a3b8',
   submitted: '#60a5fa',
   cad_assigned: '#fde68a',
   design_ready: '#c4b5fd',
+  awaiting_doctor_approval: '#c4b5fd',
   design_revision: '#fbbf24',
   design_approved: '#34d399',
   designing: '#fde68a',
@@ -65,6 +80,11 @@ const CaseDetails = () => {
   const { user } = useAuth();
   const [msgText, setMsgText] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [showViewer, setShowViewer] = useState(false);
+  // A long case runs to a dozen timeline rows; what a doctor wants on
+  // arrival is what just happened, not the whole history.
+  const [showAllTimeline, setShowAllTimeline] = useState(false);
+  const [showAllRx, setShowAllRx] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [processing, setProcessing] = useState(false);
 
@@ -91,8 +111,8 @@ const CaseDetails = () => {
     );
   }
 
-  // Security check: Dentist should only see their own clinic's cases
-  if (user?.role === 'dentist' && caseData.clinic !== user.clinic) {
+  // Security check: a clinic should only see their own clinic's cases
+  if (user?.role === 'clinic' && caseData.clinic !== user.clinic) {
     return <Navigate to="/" replace />;
   }
 
@@ -143,6 +163,7 @@ const CaseDetails = () => {
   });
 
   const statusColor = STATUS_COLOR[caseData.status] || '#94a3b8';
+  const stageIndex = STAGE_OF[caseData.status] ?? 0;
 
   return (
     <div className={styles.container}>
@@ -155,9 +176,95 @@ const CaseDetails = () => {
             {STATUS_LABEL[caseData.status] || caseData.status}
           </span>
         </div>
-        <h1 className={styles.title}>{caseData.id} <span style={{fontWeight: 300, color: 'var(--text-secondary)'}}>• {caseData.patient}</span></h1>
-        <p className={styles.subtitle}>Submitted on {caseData.received} • {caseData.type}</p>
+        {/* Patient leads — it is what a clinician identifies a case by.
+            The lab reference is secondary, not the headline. */}
+        <h1 className={styles.title}>{caseData.patient}</h1>
+        <p className={styles.subtitle}>
+          <span className={styles.caseRef} title={caseData.id}>{caseData.id}</span>
+          <span className={styles.sep} />
+          {caseData.type}
+          {caseData.received && <><span className={styles.sep} />Submitted {caseData.received}</>}
+          {caseData.warrantyYears > 0 && (
+            <><span className={styles.sep} />{caseData.warrantyYears}-year warranty</>
+          )}
+        </p>
+
+        {/* Same five-milestone track as the dashboard, so the two views
+            speak the same language about where a case has got to. */}
+        <div className={styles.track} aria-label={`Stage ${stageIndex + 1} of ${STAGES.length}`}>
+          {STAGES.map((label, i) => (
+            <span key={label}
+              className={`${styles.step} ${i < stageIndex ? styles.stepDone : ''} ${i === stageIndex ? styles.stepNow : ''}`}>
+              <span className={styles.stepBar} />
+              <span className={styles.stepLabel}>{label}</span>
+            </span>
+          ))}
+        </div>
       </header>
+
+      {/* The one thing this case needs from the doctor, at the top.
+          These controls existed but sat far down the page — on a case
+          awaiting approval you had to scroll past a 3D viewer to find
+          the button the whole case is waiting on. */}
+      {(() => {
+        const hoursLeft = caseData.doctorApprovalDueAt
+          ? Math.round((new Date(caseData.doctorApprovalDueAt) - Date.now()) / 3600000)
+          : null;
+
+        const bars = {
+          awaiting_doctor_approval: {
+            tone: 'action',
+            title: 'Your approval is needed before this prints',
+            note: hoursLeft === null ? null
+              : hoursLeft > 0
+                ? `${hoursLeft}h left. If we don't hear from you the lab proceeds with this design so your case isn't delayed.`
+                : 'The approval window has closed — the lab will resolve this shortly.',
+            actions: (
+              <>
+                <button className={styles.barPrimary} onClick={handleApproveDesign} disabled={processing}>
+                  Approve design
+                </button>
+                <button className={styles.barGhost} onClick={() => setShowRejectInput(true)} disabled={processing}>
+                  Request changes
+                </button>
+              </>
+            ),
+          },
+          action_required: {
+            tone: 'warn',
+            title: 'The lab needs something from you',
+            note: caseData.rejectionReason || 'Review this case and upload new files or instructions.',
+            actions: null,
+          },
+          dispatched: {
+            tone: 'info',
+            title: 'On its way to your clinic',
+            note: caseData.trackingNumber
+              ? `${caseData.trackingCourier} · ${caseData.trackingNumber}`
+              : null,
+            actions: (
+              <button className={styles.barPrimary} onClick={handleMarkCompleted} disabled={processing}>
+                Confirm receipt
+              </button>
+            ),
+          },
+        };
+        bars.pending_approval = bars.awaiting_doctor_approval;
+        bars.shipped = bars.dispatched;
+
+        const bar = bars[caseData.status];
+        if (!bar) return null;
+
+        return (
+          <section className={`${styles.actionBar} ${styles[bar.tone]}`}>
+            <div className={styles.actionBarText}>
+              <span className={styles.actionBarTitle}>{bar.title}</span>
+              {bar.note && <span className={styles.actionBarNote}>{bar.note}</span>}
+            </div>
+            {bar.actions && <div className={styles.actionBarButtons}>{bar.actions}</div>}
+          </section>
+        );
+      })()}
 
       <div className={styles.layout}>
         <div className={styles.mainColumn}>
@@ -212,7 +319,7 @@ const CaseDetails = () => {
           )}
 
           {/* ══════ PENDING APPROVAL BANNER ══════ */}
-          {caseData.status === 'pending_approval' && (
+          {(caseData.status === 'awaiting_doctor_approval' || caseData.status === 'pending_approval') && (
             <div className={styles.actionWarning} style={{background: 'rgba(122, 156, 150, 0.1)', borderColor: 'var(--brand-bioceramic)'}}>
               <FileCheck size={24} style={{ color: 'var(--brand-bioceramic)', flexShrink: 0, marginTop: '2px' }} />
               <div style={{flex: 1}}>
@@ -220,6 +327,29 @@ const CaseDetails = () => {
                 <p style={{margin: '0 0 12px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5}}>
                   The lab has completed the 3D design. Please review the uploaded design files below and approve or request changes.
                 </p>
+
+                {/* Deadline — the case does not wait indefinitely */}
+                {caseData.doctorApprovalDueAt && (() => {
+                  const dueAt = new Date(caseData.doctorApprovalDueAt);
+                  const hoursLeft = Math.round((dueAt.getTime() - Date.now()) / 3600000);
+                  const overdue = hoursLeft <= 0;
+                  return (
+                    <p style={{
+                      margin: '0 0 12px', fontSize: '12.5px', lineHeight: 1.5,
+                      padding: '8px 12px', borderRadius: '10px',
+                      background: overdue ? 'rgba(239,68,68,0.10)' : 'rgba(251,191,36,0.10)',
+                      border: `1px solid ${overdue ? 'rgba(239,68,68,0.35)' : 'rgba(245,158,11,0.35)'}`,
+                      // Tint carries the urgency; the text has to stay
+                      // readable in both the light and dark themes.
+                      color: 'var(--text-primary)',
+                    }}>
+                      <Clock size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                      {overdue
+                        ? 'This approval is past its deadline and will be resolved by the lab shortly.'
+                        : <>Please respond within <strong>{hoursLeft}h</strong> (by {dueAt.toLocaleString('en-IN')}). If we don’t hear from you, the lab proceeds with this design so your case isn’t delayed.</>}
+                    </p>
+                  );
+                })()}
 
                 {/* Show uploaded design files from lab */}
                 {(() => {
@@ -284,8 +414,8 @@ const CaseDetails = () => {
               <div style={{flex: 1}}>
                 <h3 style={{margin: '0 0 4px', color: '#34d399', fontSize: '16px'}}>Case Shipped — In Transit</h3>
                 <p style={{margin: '0 0 4px', fontSize: '13px', color: 'var(--text-secondary)'}}>
-                  {caseData.tracking 
-                    ? `Shipped via ${caseData.tracking.courier}. Tracking: ${caseData.tracking.number}`
+                  {(caseData.trackingCourier || caseData.tracking?.courier)
+                    ? `Shipped via ${caseData.trackingCourier || caseData.tracking.courier}. Tracking: ${caseData.trackingNumber || caseData.tracking?.number}`
                     : 'Shipment details not yet available.'
                   }
                 </p>
@@ -317,25 +447,6 @@ const CaseDetails = () => {
             </div>
           )}
 
-          {/* ══════ 3D SCAN ══════ */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>3D Scan Preview</h2>
-              <button className={styles.iconBtn}><Download size={14} /> Download STL</button>
-            </div>
-            <div className={styles.viewerContainer} style={{height: '350px'}}>
-              {caseData.files && caseData.files.length > 0 ? (
-                <STLViewer 
-                  url={caseData.files[0].url ? `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${caseData.files[0].url}?t=${Date.now()}` : null} 
-                  filename={caseData.files[0].name} 
-                />
-              ) : (
-                <div style={{display:'flex', width:'100%', height:'100%', alignItems:'center', justifyContent:'center', background:'var(--glass-bg)', border:'1px dashed var(--glass-border)', borderRadius:'12px', color:'var(--text-tertiary)'}}>
-                  No 3D scans attached to this case.
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* ══════ PRESCRIPTION ══════ */}
           <div className={styles.card}>
@@ -359,28 +470,119 @@ const CaseDetails = () => {
                   <span className={styles.detailValue}>{caseData.toothNumbers.join(', ')}</span>
                 </div>
               )}
-              {caseData.archTarget && (
+              {/* The price was nowhere on this page — a doctor had to
+                  open Billing to find out what a case costs. */}
+              {caseData.totalAmountPaise > 0 && (
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>Target Arch</span>
-                  <span className={styles.detailValue}>{caseData.archTarget}</span>
+                  <span className={styles.detailLabel}>
+                    {caseData.paymentConfirmedAt ? 'Paid' : 'Payable at dispatch'}
+                  </span>
+                  <span className={styles.detailValue}>
+                    ₹{Math.round(caseData.totalAmountPaise / 100).toLocaleString('en-IN')}
+                    <span className={styles.detailHint}> incl. GST</span>
+                  </span>
                 </div>
               )}
-              {caseData.implantSystem && (
+              {caseData.complimentary && (
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>Implant System</span>
-                  <span className={styles.detailValue}>{caseData.implantSystem}</span>
+                  <span className={styles.detailLabel}>Payable at dispatch</span>
+                  <span className={styles.detailValue}>
+                    ₹0<span className={styles.detailHint}> Scan Day crown</span>
+                  </span>
                 </div>
               )}
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>Assigned Tech</span>
-                <span className={styles.detailValue}>{caseData.tech}</span>
-              </div>
+
+              {/* Everything below is reference: correct to have, but not
+                  what the doctor opened this page to find. */}
+              {showAllRx && (
+                <>
+                  {caseData.archTarget && (
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailLabel}>Target Arch</span>
+                      <span className={styles.detailValue}>{caseData.archTarget}</span>
+                    </div>
+                  )}
+                  {caseData.implantSystem && (
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailLabel}>Implant System</span>
+                      <span className={styles.detailValue}>{caseData.implantSystem}</span>
+                    </div>
+                  )}
+                  {caseData.finishingTier === 'premium' && (
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailLabel}>Finish</span>
+                      <span className={styles.detailValue}>Signature Match</span>
+                    </div>
+                  )}
+                  {caseData.warrantyYears > 0 && (
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailLabel}>Warranty</span>
+                      <span className={styles.detailValue}>{caseData.warrantyYears} years</span>
+                    </div>
+                  )}
+                  {caseData.tech && caseData.tech !== 'Unassigned' && (
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailLabel}>Assigned Tech</span>
+                      <span className={styles.detailValue}>{caseData.tech}</span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            {/* Only offered when there is actually something behind it. */}
+            {!showAllRx && (
+              caseData.archTarget || caseData.implantSystem ||
+              caseData.finishingTier === 'premium' || caseData.warrantyYears > 0 ||
+              (caseData.tech && caseData.tech !== 'Unassigned')
+            ) && (
+              <button className={styles.moreDetails} onClick={() => setShowAllRx(true)}>
+                More details
+              </button>
+            )}
             {caseData.instructions && (
               <div className={styles.notesSection}>
                 <span className={styles.detailLabel}>Doctor's Instructions</span>
                 <p className={styles.notesText}>{caseData.instructions}</p>
               </div>
+            )}
+          </div>
+
+          {/* ══════ 3D SCAN ══════ */}
+          {/* Collapsible, and below the prescription. The viewer is the
+              biggest thing on the page but rarely the reason a doctor
+              opens it — usually they want the shade, the price or the
+              status. Reviewing geometry is a deliberate act, so it is
+              one click away rather than occupying the fold. */}
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <button className={styles.disclosure}
+                aria-expanded={showViewer}
+                onClick={() => setShowViewer(v => !v)}>
+                <ChevronLeft size={16}
+                  className={`${styles.disclosureChevron} ${showViewer ? styles.disclosureOpen : ''}`} />
+                <h2 className={styles.cardTitle}>3D Scan Preview</h2>
+                <span className={styles.disclosureHint}>
+                  {caseData.files?.length ? `${caseData.files.length} file${caseData.files.length > 1 ? 's' : ''}` : 'none attached'}
+                </span>
+              </button>
+              {showViewer && (
+                <button className={styles.iconBtn}><Download size={14} /> Download STL</button>
+              )}
+            </div>
+            {showViewer && (
+            <div className={styles.viewerContainer} style={{ height: '350px' }}>
+              {caseData.files && caseData.files.length > 0 ? (
+                <STLViewer 
+                  url={caseData.files[0].url ? `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}${caseData.files[0].url}?t=${Date.now()}` : null} 
+                  filename={caseData.files[0].name} 
+                />
+              ) : (
+                <div style={{display:'flex', width:'100%', height:'100%', alignItems:'center', justifyContent:'center', background:'var(--glass-bg)', border:'1px dashed var(--glass-border)', borderRadius:'12px', color:'var(--text-tertiary)'}}>
+                  No 3D scans attached to this case.
+                </div>
+              )}
+            </div>
             )}
           </div>
         </div>
@@ -390,20 +592,34 @@ const CaseDetails = () => {
           <div className={styles.card}>
             <h2 className={styles.cardTitle}>Case Timeline</h2>
             <div className={styles.timeline}>
-              {(caseData.timeline && caseData.timeline.length > 0) ? (
-                caseData.timeline.map((item, idx) => (
-                  <div key={idx} className={`${styles.timelineItem} ${styles.completed}`}>
-                    <div className={styles.timelineDot}>
-                      <CheckCircle size={10} />
-                    </div>
-                    <div className={styles.timelineContent}>
-                      <h4>{item.label}</h4>
-                      <p>{item.time || 'Completed'}</p>
-                      {item.info && <p className={styles.timelineInfo}>{item.info}</p>}
-                    </div>
-                  </div>
-                ))
-              ) : (
+              {(caseData.timeline && caseData.timeline.length > 0) ? (() => {
+                // The newest three, unless the doctor asks for the rest.
+                const all = caseData.timeline;
+                const hidden = showAllTimeline ? 0 : Math.max(all.length - 3, 0);
+                const shown = hidden ? all.slice(-3) : all;
+                return (
+                  <>
+                    {hidden > 0 && (
+                      <button className={styles.timelineMore}
+                        onClick={() => setShowAllTimeline(true)}>
+                        Show {hidden} earlier event{hidden > 1 ? 's' : ''}
+                      </button>
+                    )}
+                    {shown.map((item, idx) => (
+                      <div key={idx} className={`${styles.timelineItem} ${styles.completed}`}>
+                        <div className={styles.timelineDot}>
+                          <CheckCircle size={10} />
+                        </div>
+                        <div className={styles.timelineContent}>
+                          <h4>{item.label}</h4>
+                          <p>{item.time || 'Completed'}</p>
+                          {item.info && <p className={styles.timelineInfo}>{item.info}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                );
+              })() : (
                 <div className={styles.timelineEmpty}>No timeline events recorded yet.</div>
               )}
 
@@ -421,13 +637,14 @@ const CaseDetails = () => {
               )}
             </div>
 
-            {/* Tracking info */}
-            {caseData.tracking && (
+            {/* Tracking info — flat fields are what the API returns; the
+                nested object only exists in optimistic local state. */}
+            {(caseData.trackingCourier || caseData.tracking) && (
               <div className={styles.trackingSection}>
                 <span className={styles.detailLabel}>Tracking Information</span>
                 <div className={styles.trackingInfo}>
-                  <span>{caseData.tracking.courier}</span>
-                  <span className={styles.trackingNumber}>{caseData.tracking.number}</span>
+                  <span>{caseData.trackingCourier || caseData.tracking?.courier}</span>
+                  <span className={styles.trackingNumber}>{caseData.trackingNumber || caseData.tracking?.number}</span>
                 </div>
               </div>
             )}
@@ -436,9 +653,9 @@ const CaseDetails = () => {
           {/* ══════ CHAT ══════ */}
           <div className={`${styles.card} ${styles.chatCard}`}>
             <h2 className={styles.cardTitle}>Case Messaging</h2>
-            <div className={styles.chatArea}>
+            <div className={caseData.messages.length ? styles.chatArea : styles.chatEmpty}>
               {caseData.messages.length === 0 && (
-                <div className={styles.emptyChat}>No messages yet. Start a conversation about this case.</div>
+                <>Ask the lab anything about this case — they reply here.</>
               )}
               {caseData.messages.map((msg, idx) => (
                 <div key={idx} className={msg.from === 'doctor' ? styles.messageDoctor : styles.messageLab}>

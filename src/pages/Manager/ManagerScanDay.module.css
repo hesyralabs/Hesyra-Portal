@@ -1,0 +1,177 @@
+.container { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+
+.title {
+  font-size: 1.5rem; font-weight: 300; color: var(--text-primary);
+  display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+}
+
+.subtitle { color: var(--text-secondary); font-size: 0.8rem; }
+
+.logBtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--brand-bioceramic, #7a9c96); color: #06120f;
+  border: none; border-radius: 10px; padding: 0.6rem 1rem;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.logBtn:hover { filter: brightness(1.1); }
+
+/* ── Offer terms, collapsed by default ───────────────────────── */
+.terms {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 12px; overflow: hidden;
+}
+
+.termsToggle {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  background: none; border: none; cursor: pointer;
+  padding: 0.6rem 1rem; color: var(--text-secondary); font-size: 0.75rem;
+  text-align: left;
+}
+.termsToggle:hover { color: var(--text-primary); }
+
+.termsBody {
+  padding: 0 1rem 0.9rem 2.1rem; font-size: 0.75rem;
+  color: var(--text-secondary); line-height: 1.7;
+}
+.termsBody strong { color: var(--text-primary); font-weight: 600; }
+
+/* ── Summary tiles ───────────────────────────────────────────── */
+.statsRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+
+.stat {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 14px; padding: 1rem 1.25rem;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.statVal { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); }
+.statLabel { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); }
+
+/* ── Visits table ────────────────────────────────────────────── */
+.table {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: 16px; overflow: hidden;
+}
+
+.tableHeader, .tableRow {
+  display: grid;
+  grid-template-columns: 1.6fr 0.9fr 1fr 1.8fr 1fr;
+  padding: 0.8rem 1.25rem; align-items: center; gap: 12px;
+}
+
+.tableHeader {
+  background: rgba(0,0,0,0.2); font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text-secondary); font-weight: 600;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.tableRow {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-size: 0.85rem; color: var(--text-primary);
+}
+.tableRow:last-child { border-bottom: none; }
+.tableRow.closed { opacity: 0.5; }
+
+.clinicCell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.clinicName { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visitId { font-size: 0.68rem; color: var(--text-tertiary); font-family: monospace; }
+
+.dateCell { font-size: 0.78rem; color: var(--text-secondary); }
+
+.windowOpen {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  background: rgba(52,211,153,0.12); color: #34d399;
+}
+.windowClosed {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  background: rgba(148,163,184,0.1); color: var(--text-tertiary);
+}
+
+/* Progress toward the next reward tier */
+.progressCell { display: flex; flex-direction: column; gap: 5px; }
+.progressTop {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.75rem; color: var(--text-secondary);
+}
+.progressCount { color: var(--text-primary); font-weight: 600; }
+.progressBar {
+  height: 4px; border-radius: 4px; overflow: hidden;
+  background: rgba(255,255,255,0.07);
+}
+.progressFill { height: 100%; border-radius: 4px; background: var(--brand-bioceramic, #7a9c96); transition: width 0.3s ease; }
+.progressMaxed { background: #fbbf24; }
+
+.creditsCell { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; }
+.creditsIssued { color: #fbbf24; font-weight: 600; }
+.creditsRedeemed { font-size: 0.68rem; color: var(--text-tertiary); }
+.creditsNone { color: var(--text-tertiary); }
+
+.empty { padding: 3rem 1rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem; }
+.emptyHint { display: block; margin-top: 0.4rem; font-size: 0.75rem; color: var(--text-tertiary); }
+.loading { padding: 3rem; text-align: center; color: var(--text-secondary); }
+
+/* ── Modal ───────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; backdrop-filter: blur(3px);
+}
+
+.modal {
+  position: relative; width: min(440px, calc(100vw - 2rem));
+  /* --bg-secondary does not exist in the token set, so this silently
+     fell through to a hardcoded slate that was not the brand surface. */
+  background: var(--bg-surface); border: 1px solid var(--glass-border);
+  border-radius: 16px; padding: 1.5rem;
+}
+
+.modalClose {
+  position: absolute; top: 0.85rem; right: 0.85rem;
+  background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+  padding: 4px; border-radius: 6px;
+}
+.modalClose:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+.modalTitle { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); }
+.modalSub { font-size: 0.76rem; color: var(--text-secondary); margin: 0.3rem 0 1.1rem; line-height: 1.5; }
+
+.field { margin-bottom: 0.9rem; }
+.fieldLabel { display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.35rem; }
+
+.input, .select, .textarea {
+  width: 100%; box-sizing: border-box;
+  padding: 0.55rem 0.7rem; border-radius: 8px;
+  border: 1px solid var(--glass-border); background: rgba(255,255,255,0.04);
+  color: var(--text-primary); font-size: 0.85rem; font-family: inherit;
+}
+.input:focus, .select:focus, .textarea:focus {
+  outline: none; border-color: var(--brand-bioceramic, #7a9c96);
+}
+.textarea { resize: vertical; min-height: 60px; }
+/* Native dropdown options are painted by the OS, so they need real
+   colours rather than inherited transparency. */
+.select option { background: var(--bg-surface); color: var(--text-primary); }
+
+.msgError { font-size: 0.78rem; color: #f87171; margin-bottom: 0.75rem; line-height: 1.5; }
+.msgOk { font-size: 0.78rem; color: #34d399; margin-bottom: 0.75rem; }
+
+.modalActions { display: flex; gap: 0.5rem; margin-top: 1.1rem; }
+
+.btnCancel {
+  flex: 1; padding: 0.55rem; border-radius: 8px;
+  border: 1px solid var(--glass-border); background: transparent;
+  color: var(--text-secondary); cursor: pointer; font-size: 0.82rem;
+}
+.btnCancel:hover { color: var(--text-primary); }
+
+.btnSave {
+  flex: 2; padding: 0.55rem; border-radius: 8px; border: none;
+  background: var(--brand-bioceramic, #7a9c96); color: #06120f;
+  cursor: pointer; font-size: 0.82rem; font-weight: 600;
+}
+.btnSave:disabled { opacity: 0.6; cursor: not-allowed; }

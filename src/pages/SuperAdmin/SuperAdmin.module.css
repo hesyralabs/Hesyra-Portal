@@ -460,16 +460,40 @@
   color: #fca5a5;
 }
 
-.role_dentist {
+.role_clinic {
   background: rgba(59, 130, 246, 0.12);
   border-color: rgba(59, 130, 246, 0.25);
   color: #93c5fd;
 }
 
-.role_tech {
+.role_technician {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.25);
   color: #6ee7b7;
+}
+
+.role_manager {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+}
+
+.role_cad_designer {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.25);
+  color: #c4b5fd;
+}
+
+.role_ceramist {
+  background: rgba(236, 72, 153, 0.12);
+  border-color: rgba(236, 72, 153, 0.25);
+  color: #f9a8d4;
+}
+
+.role_dispatch {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.25);
+  color: #5eead4;
 }
 
 /* ─── Status Indicators ─────────────────────────────────────────── */

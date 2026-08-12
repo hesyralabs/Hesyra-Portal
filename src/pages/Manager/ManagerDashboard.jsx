@@ -14,6 +14,7 @@ const STATUS_CONFIG = {
   submitted:          { label: 'New',              color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
   cad_assigned:       { label: 'CAD Assigned',     color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
   design_ready:       { label: 'Design Ready',     color: '#c4b5fd', bg: 'rgba(196,181,253,0.12)' },
+  awaiting_doctor_approval: { label: 'With Doctor', color: '#f0abfc', bg: 'rgba(240,171,252,0.12)' },
   design_approved:    { label: 'Approved',          color: '#34d399', bg: 'rgba(52,211,153,0.12)' },
   post_processing:    { label: 'Post-Processing',  color: '#fcd34d', bg: 'rgba(252,211,77,0.12)' },
   qa:                 { label: 'QA',               color: '#fb923c', bg: 'rgba(251,146,60,0.12)' },
@@ -26,11 +27,56 @@ const STATUS_CONFIG = {
   action_required:    { label: 'Action Required',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
 };
 
+// Same five milestones the clinic dashboard and case detail draw, so
+// every view in the portal describes progress identically.
+const STAGES = ['Submitted', 'Design', 'Approved', 'Production', 'Dispatched'];
+const STAGE_OF = {
+  draft: 0, submitted: 0, action_required: 0,
+  cad_assigned: 1, designing: 1, design_ready: 1, design_revision: 1, blocked: 1,
+  awaiting_doctor_approval: 1, pending_approval: 1,
+  design_approved: 2,
+  batched: 3, printing: 3, printed: 3, finishing: 3, post_processing: 3, qa: 3,
+  ready_for_dispatch: 3, payment_pending: 3, overdue: 3, packaged: 3,
+  dispatched: 4, shipped: 4, completed: 4,
+};
+
+// Whose desk the case is sitting on. A manager's whole job is moving
+// work along, and "who is holding this" is the question the old page
+// could not answer at all.
+const HOLDER = {
+  submitted:                { who: 'Lab — assign a designer', tone: 'act' },
+  action_required:          { who: 'Clinic — info needed',    tone: 'wait' },
+  cad_assigned:             { who: 'Designer',                tone: 'wait' },
+  designing:                { who: 'Designer',                tone: 'wait' },
+  design_revision:          { who: 'Designer — rework',       tone: 'warn' },
+  design_ready:             { who: 'You — review design',     tone: 'act' },
+  awaiting_doctor_approval: { who: 'Doctor',                  tone: 'wait' },
+  pending_approval:         { who: 'Doctor',                  tone: 'wait' },
+  blocked:                  { who: 'You — blocked',           tone: 'warn' },
+  design_approved:          { who: 'Production',              tone: 'wait' },
+  batched:                  { who: 'Technician',              tone: 'wait' },
+  printing:                 { who: 'Technician',              tone: 'wait' },
+  printed:                  { who: 'Awaiting ceramist',       tone: 'warn' },
+  finishing:                { who: 'Ceramist',                tone: 'wait' },
+  post_processing:          { who: 'Technician',              tone: 'wait' },
+  qa:                       { who: 'QC',                      tone: 'wait' },
+  ready_for_dispatch:       { who: 'Dispatch — pack it',      tone: 'act' },
+  payment_pending:          { who: 'Clinic — payment',        tone: 'warn' },
+  overdue:                  { who: 'Clinic — overdue',        tone: 'warn' },
+  packaged:                 { who: 'Dispatch — send it',      tone: 'act' },
+  dispatched:               { who: 'In transit',              tone: 'done' },
+  completed:                { who: 'Delivered',               tone: 'done' },
+};
+
 const ManagerDashboard = () => {
   const { user } = useAuth();
   const [cases, setCases] = useState([]);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // Pipeline drill-down (a single status) and the segment strip. Both
+  // feed the same queue; previously they fed a list that was computed
+  // and then never rendered, so clicking either did nothing at all.
+  const [statusFilter, setStatusFilter] = useState(null);
+  const [segment, setSegment] = useState('all');
   const [loading, setLoading] = useState(true);
   const [poolStats, setPoolStats] = useState({ totalInPool: 0, urgentCount: 0, overdueCount: 0 });
   const [creditClinics, setCreditClinics] = useState([]);   // net_30 clinics
@@ -90,35 +136,48 @@ const ManagerDashboard = () => {
     statusCounts[c.status] = (statusCounts[c.status] || 0) + 1;
   });
 
-  const filtered = activeCases.filter(c => {
-    const matchStatus = statusFilter === 'all' || c.status === statusFilter;
-    const q = search.toLowerCase();
-    const matchSearch = !q || c.id?.toLowerCase().includes(q) || c.caseType?.toLowerCase().includes(q);
-    return matchStatus && matchSearch;
-  });
 
-  const designPending = activeCases.filter(c => c.status === 'design_ready').length;
+  // ─── Age & SLA ───────────────────────────────────────────────
+  const hoursSince = (d) => d ? Math.floor((Date.now() - new Date(d)) / 3600000) : null;
+  const ageLabel = (h) => h === null ? '—' : h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
 
-  const statTiles = [
-    { label: 'Active Cases',       value: activeCases.length,                     icon: ClipboardList, color: '#60a5fa' },
-    { label: 'Urgent / Blocked',   value: urgentCases.length,                     icon: AlertCircle,   color: '#ef4444' },
-    { label: 'Designs for Review', value: designPending,                          icon: Zap,           color: '#a78bfa' },
-    { label: 'Ready for Dispatch', value: statusCounts['ready_for_dispatch'] || 0, icon: Package,      color: '#f59e0b' },
-    {
-      label: 'Unclaimed in Pool',
-      value: poolStats.totalInPool,
-      icon: Layers,
-      color: poolStats.urgentCount > 0 ? '#ef4444' : poolStats.totalInPool > 0 ? '#f59e0b' : '#34d399',
-      subtitle: poolStats.urgentCount > 0 ? `${poolStats.urgentCount} approaching timeout` : null,
-    },
-    ...(totalOutstandingPaise > 0 ? [{
-      label: 'Outstanding Credit',
-      value: `₹${(totalOutstandingPaise / 100).toLocaleString('en-IN')}`,
-      icon: CreditCard,
-      color: '#c084fc',
-      subtitle: `${creditClinics.length} clinic${creditClinics.length !== 1 ? 's' : ''} on Net-30`,
-    }] : []),
+  // A doctor approval that has blown its deadline is the single most
+  // common cause of a missed turnaround, so it is surfaced by name.
+  const approvalOverdue = activeCases.filter(c =>
+    ['awaiting_doctor_approval', 'pending_approval'].includes(c.status) &&
+    c.doctorApprovalDueAt && new Date(c.doctorApprovalDueAt) < new Date());
+
+  // Work that is genuinely waiting on the lab, not on someone else.
+  const needsManager = activeCases.filter(c =>
+    ['design_ready', 'blocked', 'submitted', 'printed'].includes(c.status));
+
+  // ─── Segments ────────────────────────────────────────────────
+  // These filter the queue below rather than just counting. Every one
+  // of them used to be a number with nothing behind it.
+  const SEGMENTS = [
+    { key: 'all',        label: 'All active',   match: () => true },
+    { key: 'needs',      label: 'Needs the lab', match: c => ['design_ready', 'blocked', 'submitted', 'printed'].includes(c.status) },
+    { key: 'doctor',     label: 'With doctor',   match: c => ['awaiting_doctor_approval', 'pending_approval'].includes(c.status) },
+    { key: 'production', label: 'In production', match: c => ['design_approved', 'batched', 'printing', 'printed', 'finishing', 'post_processing', 'qa'].includes(c.status) },
+    { key: 'dispatch',   label: 'Ready to ship', match: c => ['ready_for_dispatch', 'packaged'].includes(c.status) },
+    { key: 'money',      label: 'Payment',       match: c => ['payment_pending', 'overdue'].includes(c.status) },
   ];
+
+  const seg = SEGMENTS.find(s => s.key === segment) || SEGMENTS[0];
+  const q = search.trim().toLowerCase();
+
+  const queue = activeCases
+    .filter(c => (statusFilter ? c.status === statusFilter : seg.match(c)))
+    .filter(c => !q
+      || c.id?.toLowerCase().includes(q)
+      || c.patient?.toLowerCase().includes(q)
+      || c.clinic?.toLowerCase().includes(q)
+      || c.doctor?.toLowerCase().includes(q)
+      || c.caseType?.toLowerCase().includes(q))
+    // Priority first, then oldest — the order a manager works in.
+    .sort((a, b) =>
+      (b.priorityFlag ? 1 : 0) - (a.priorityFlag ? 1 : 0) ||
+      new Date(a.createdAt) - new Date(b.createdAt));
 
   // Generate monthly invoices manually
   const handleGenerateInvoices = async () => {
@@ -173,45 +232,65 @@ const ManagerDashboard = () => {
         </div>
       </header>
 
-      {/* ─── Stat tiles ─── */}
-      <section className={styles.statGrid}>
-        {statTiles.map(tile => {
-          const Icon = tile.icon;
-          return (
-            <div key={tile.label} className={styles.statTile} style={{ '--accent': tile.color }}>
-              <div className={styles.statIcon}><Icon size={22} /></div>
-              <div className={styles.statValue}>{loading ? '—' : tile.value}</div>
-              <div className={styles.statLabel}>{tile.label}</div>
-            </div>
-          );
-        })}
-      </section>
-
-      {/* ─── Urgent cases ─── */}
-      {urgentCases.length > 0 && (
-        <section className={styles.urgentSection}>
-          <div className={styles.sectionHeader}>
-            <TriangleAlert size={16} className={styles.urgentIcon} />
-            <span>Requires Attention ({urgentCases.length})</span>
-          </div>
-          <div className={styles.urgentList}>
-            {urgentCases.slice(0, 5).map(c => {
-              const cfg = STATUS_CONFIG[c.status] || { label: c.status, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
-              return (
-                <Link key={c.id} to={`/manager/case/${c.id}`} className={styles.urgentRow}>
-                  {c.priorityFlag && <Star size={12} className={styles.priorityStar} />}
-                  <span className={styles.urgentId}>{c.id}</span>
-                  <span className={styles.urgentType}>{c.caseType?.replace(/_/g,' ')}</span>
-                  <span className={styles.urgentBadge} style={{ color: cfg.color, background: cfg.bg }}>
-                    {cfg.label}
-                  </span>
-                  <ChevronRight size={14} className={styles.urgentArrow} />
-                </Link>
-              );
-            })}
+      {/* ─── What needs the lab, right now ───────────────────────
+          Shown only when there is something in it. Five tiles reading
+          zero taught an operator to ignore the whole row. */}
+      {!loading && (approvalOverdue.length > 0 || poolStats.overdueCount > 0 || urgentCases.length > 0 || needsManager.length > 0) && (
+        <section className={styles.attentionBand}>
+          <TriangleAlert size={15} className={styles.attentionIcon} />
+          <div className={styles.attentionItems}>
+            {needsManager.length > 0 && (
+              <button className={`${styles.attentionChip} ${styles.act}`}
+                onClick={() => { setStatusFilter(null); setSegment('needs'); }}>
+                {needsManager.length} waiting on the lab
+              </button>
+            )}
+            {approvalOverdue.length > 0 && (
+              <button className={`${styles.attentionChip} ${styles.warn}`}
+                onClick={() => { setStatusFilter(null); setSegment('doctor'); }}>
+                {approvalOverdue.length} approval{approvalOverdue.length > 1 ? 's' : ''} past deadline
+              </button>
+            )}
+            {urgentCases.length > 0 && (
+              <button className={`${styles.attentionChip} ${styles.warn}`}
+                onClick={() => { setStatusFilter(null); setSegment('all'); setSearch(''); }}>
+                {urgentCases.length} urgent or blocked
+              </button>
+            )}
+            {poolStats.overdueCount > 0 && (
+              <Link to="/manager/workload" className={`${styles.attentionChip} ${styles.warn}`}>
+                {poolStats.overdueCount} unclaimed past timeout
+              </Link>
+            )}
+            {totalOutstandingPaise > 0 && (
+              <Link to="/manager/clinics" className={`${styles.attentionChip} ${styles.info}`}>
+                ₹{(totalOutstandingPaise / 100).toLocaleString('en-IN')} outstanding · {creditClinics.length} on Net-30
+              </Link>
+            )}
           </div>
         </section>
       )}
+
+      {/* ─── Segments + search ─── */}
+      <div className={styles.toolbar}>
+        <div className={styles.segments} role="tablist">
+          {SEGMENTS.map(s => {
+            const n = activeCases.filter(s.match).length;
+            const on = !statusFilter && segment === s.key;
+            return (
+              <button key={s.key} role="tab" aria-selected={on}
+                disabled={n === 0 && s.key !== 'all'}
+                className={`${styles.segment} ${on ? styles.segmentOn : ''}`}
+                onClick={() => { setStatusFilter(null); setSegment(s.key); }}>
+                {s.label} <span className={styles.segCount}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+        <input className={styles.search} type="search" value={search}
+          placeholder="Case, patient, clinic or doctor"
+          onChange={e => setSearch(e.target.value)} />
+      </div>
 
       {/* ─── Fix #13: Pool queue drill-down ─── */}
       {poolStats.cases && poolStats.cases.length > 0 && (
@@ -261,26 +340,91 @@ const ManagerDashboard = () => {
         </section>
       )}
 
-      {/* ─── Status pipeline overview ─── */}
-      <section className={styles.pipelineSection}>
-        <div className={styles.sectionHeader}>
-          <TrendingUp size={16} />
-          <span>Pipeline Breakdown</span>
+      {/* ─── The work queue ──────────────────────────────────────
+          The page had none: it counted cases and then made you leave to
+          see any of them. This is what the segments and the pipeline
+          tiles have always been filtering. */}
+      <section className={styles.queueCard}>
+        <div className={styles.queueHead}>
+          <span>Case</span>
+          <span>Clinic</span>
+          <span>Progress</span>
+          <span>Waiting on</span>
+          <span className={styles.colRight}>Age</span>
         </div>
-        <div className={styles.pipelineGrid}>
+
+        <div className={styles.queueBody}>
+          {loading ? (
+            <div className={styles.queueEmpty}>Loading cases…</div>
+          ) : queue.length === 0 ? (
+            <div className={styles.queueEmpty}>
+              {/* Name every filter that is actually narrowing the list,
+                  so an empty table is never a mystery. */}
+              {search && statusFilter
+                ? <>No case at <strong>{STATUS_CONFIG[statusFilter]?.label || statusFilter}</strong> matches “{search}”.</>
+                : search
+                  ? <>Nothing matches “{search}” in <strong>{seg.label}</strong>.</>
+                  : statusFilter
+                    ? <>Nothing at <strong>{STATUS_CONFIG[statusFilter]?.label || statusFilter}</strong>.</>
+                    : <>Nothing in <strong>{seg.label}</strong>.</>}
+            </div>
+          ) : queue.map(c => {
+            const stage = STAGE_OF[c.status] ?? 0;
+            const hold = HOLDER[c.status] || { who: c.status, tone: 'wait' };
+            const h = hoursSince(c.createdAt);
+            const late = ['awaiting_doctor_approval', 'pending_approval'].includes(c.status)
+              && c.doctorApprovalDueAt && new Date(c.doctorApprovalDueAt) < new Date();
+
+            return (
+              <Link key={c.id} to={`/manager/case/${c.id}`} className={styles.queueRow}>
+                <div className={styles.cellCase}>
+                  <span className={styles.caseIdRow}>
+                    {c.priorityFlag && <Star size={11} className={styles.priorityStar} />}
+                    {c.id}
+                  </span>
+                  <span className={styles.caseSub}>
+                    {c.patient} · {c.caseType?.replace(/_/g, ' ')}
+                  </span>
+                </div>
+
+                <div className={styles.cellClinic}>
+                  <span className={styles.clinicName}>{c.clinic || '—'}</span>
+                  <span className={styles.caseSub}>{c.doctor}</span>
+                </div>
+
+                <div className={styles.track} aria-label={`${STAGES[stage]} — stage ${stage + 1} of ${STAGES.length}`}>
+                  {STAGES.map((label, i) => (
+                    <span key={label} title={label}
+                      className={`${styles.step} ${i < stage ? styles.stepDone : ''} ${i === stage ? styles.stepNow : ''}`}>
+                      <span className={styles.stepBar} />
+                    </span>
+                  ))}
+                  <span className={styles.stageName}>{STAGES[stage]}</span>
+                </div>
+
+                <div className={styles.cellHolder}>
+                  <span className={`${styles.holder} ${styles[hold.tone]}`}>{hold.who}</span>
+                  {late && <span className={styles.lateFlag}>overdue</span>}
+                </div>
+
+                <div className={`${styles.cellAge} ${styles.colRight}`}>{ageLabel(h)}</div>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Drill-down by exact status, folded under the queue instead of
+            occupying a section of its own. */}
+        <div className={styles.pipelineStrip}>
           {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
             const count = statusCounts[key] || 0;
             if (count === 0) return null;
             return (
-              <button
-                key={key}
-                className={`${styles.pipelineTile} ${statusFilter === key ? styles.pipelineTileActive : ''}`}
-                onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)}
+              <button key={key}
+                className={`${styles.pipeChip} ${statusFilter === key ? styles.pipeChipOn : ''}`}
                 style={{ '--tile-color': cfg.color }}
-              >
-                <span className={styles.pipelineCount}>{count}</span>
-                <span className={styles.pipelineLabel}>{cfg.label}</span>
-                <div className={styles.pipelineBar} style={{ background: cfg.bg, borderColor: cfg.color }} />
+                onClick={() => setStatusFilter(statusFilter === key ? null : key)}>
+                <span className={styles.pipeCount}>{count}</span> {cfg.label}
               </button>
             );
           })}

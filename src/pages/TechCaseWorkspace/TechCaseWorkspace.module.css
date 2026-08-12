@@ -953,51 +953,6 @@
   font-weight: 600;
 }
 
-/* ─── Light Mode Overrides ─── */
-:global(.light-mode) .caseId { color: var(--brand-azure); }
-:global(.light-mode) .glassCard { background: var(--bg-surface); box-shadow: var(--shadow-sm); border: 1px solid var(--glass-border); }
-:global(.light-mode) .cardHeader { background: var(--bg-deep); border-bottom: 1px solid var(--glass-border-strong); }
-:global(.light-mode) .headerLabel, :global(.light-mode) .headerLabel span, :global(.light-mode) .headerLabel svg { color: var(--text-primary); }
-:global(.light-mode) .rxValue, :global(.light-mode) .qcTitle, :global(.light-mode) .eventLabel { color: var(--text-primary); }
-:global(.light-mode) .rxLabel, :global(.light-mode) .eventTime, :global(.light-mode) .eventInfo { color: var(--text-secondary); }
-:global(.light-mode) .commandBar { background: var(--bg-surface); box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05); border-top: 1px solid var(--glass-border); }
-:global(.light-mode) .docMsg .msgBubble { background: var(--bg-deep); color: var(--text-primary); }
-:global(.light-mode) .labMsg .msgBubble { background: var(--brand-bioceramic); color: #fff; }
-:global(.light-mode) .modalOverlay { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); }
-:global(.light-mode) .modal { background: var(--bg-surface); box-shadow: var(--shadow-md); border: 1px solid var(--glass-border); }
-:global(.light-mode) .modalTitle { color: var(--brand-azure); }
-:global(.light-mode) .modalLabel { color: var(--text-secondary); }
-:global(.light-mode) .btnAction { box-shadow: var(--shadow-sm); }
-:global(.light-mode) .uploadDropzone { background: var(--bg-base); border-color: var(--glass-border-strong); color: var(--text-secondary); }
-:global(.light-mode) .uploadDropzone:hover { background: var(--bg-deep); }
-:global(.light-mode) .fileItem { background: var(--bg-base); border-color: var(--glass-border); }
-:global(.light-mode) .fileName { color: var(--text-primary); }
-
-/* Form inputs & specific text fixes */
-:global(.light-mode) .inputGroup input, 
-:global(.light-mode) .inputGroup select, 
-:global(.light-mode) .inputGroup select option,
-:global(.light-mode) .messageInput input,
-:global(.light-mode) .modalTextarea {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  border-color: var(--glass-border-strong);
-}
-
-:global(.light-mode) .btnOutline { color: var(--text-secondary); border-color: var(--glass-border-strong); }
-:global(.light-mode) .btnOutline:hover { background: var(--bg-deep); color: var(--text-primary); }
-:global(.light-mode) .headerAction { color: var(--text-secondary); }
-:global(.light-mode) .headerAction:hover { background: var(--bg-deep); color: var(--text-primary); }
-
-/* Force icons to inherit high-contrast text color */
-:global(.light-mode) svg {
-  stroke: currentColor;
-}
-:global(.light-mode) .patientName {
-  color: var(--text-primary);
-}
-:global(.light-mode) .statusBadge { background: rgba(0, 0, 0, 0.04); box-shadow: none; font-weight: 700; }
-:global(.light-mode) .statusDot { box-shadow: none; }
 
 /* ─── New classes for redesigned TechCaseWorkspace ─── */
 
