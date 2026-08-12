@@ -107,9 +107,19 @@ From **Hesyra Introductory Price List, July 2026 (Launch Edition)**, valid
 till 30 Sept 2026. The *scanned* version's aligner numbers are the correct
 ones (an earlier PDF had different figures — ignore that one).
 
-**ALL PRICES ARE EXCLUSIVE OF GST. GST @5% IS ADDED ON TOP.**
-Originally coded as 12% *inclusive* — both wrong. Now `GST_RATE = 0.05` in
-`server/lib/config.js`, added on top at case creation.
+**ALL PRICES ARE EXCLUSIVE OF GST. GST IS ADDED ON TOP.**
+Originally coded as 12% *inclusive* — both wrong.
+
+The rate is **not** universal:
+
+| What | Rate |
+|---|---|
+| Clear aligners | **8%** |
+| Everything else | **5%** |
+
+Both live in `server/lib/config.js` (`GST_RATE`, `GST_RATE_BY_CASE_TYPE`).
+**Always call `config.gstRateFor(caseType)`** — reading `GST_RATE` directly
+while holding a case type is how an aligner gets taxed at the wrong rate.
 
 ### Crowns (per unit) — bridges bill per unit at the same tier, no span surcharge
 | Tier | Price | Warranty |
